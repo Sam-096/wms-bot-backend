@@ -10,7 +10,10 @@ import reactor.core.publisher.Flux;
 
 @RestController
 @RequestMapping("/api/bot")
-@CrossOrigin(origins = "http://localhost:4200")
+@CrossOrigin(origins = {
+    "http://localhost:4200",
+    "https://wmsai.netlify.app"        
+})
 public class WMSBotController {
 
     private final LLMEngineFactory llmFactory;
@@ -21,6 +24,11 @@ public class WMSBotController {
             WMSPromptBuilder promptBuilder) {
         this.llmFactory    = llmFactory;
         this.promptBuilder = promptBuilder;
+    }
+
+    @GetMapping("/")
+    public String root() {
+        return "✅ WMS Bot Backend is live on Render!";
     }
 
     @GetMapping("/health")
