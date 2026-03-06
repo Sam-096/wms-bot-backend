@@ -4,6 +4,8 @@ import com.wnsai.wms_bot.security.JwtAuthFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableReactiveMethodSecurity;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
@@ -13,7 +15,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.reactive.CorsConfigurationSource;
+import org.springframework.web.cors.reactive.CorsWebFilter;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
@@ -27,16 +29,45 @@ public class SecurityConfig {
     @Value("${cors.allowed-origins}")
     private String rawAllowedOrigins;
 
+    /**
+     * Standalone CorsWebFilter at highest precedence — runs BEFORE the security
+     * filter chain so preflight OPTIONS requests get proper CORS headers even if
+     * they are rejected by the security chain.
+     */
+    @Bean
+    @Order(Ordered.HIGHEST_PRECEDENCE)
+    public CorsWebFilter corsWebFilter() {
+        List<String> origins = Arrays.stream(rawAllowedOrigins.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .toList();
+
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(origins);
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+        config.setAllowedHeaders(List.of("*"));
+        config.setExposedHeaders(List.of("Authorization", "Content-Disposition"));
+        config.setAllowCredentials(true);
+        config.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return new CorsWebFilter(source);
+    }
+
     @Bean
     public SecurityWebFilterChain filterChain(ServerHttpSecurity http,
                                                JwtAuthFilter jwtAuthFilter) {
         return http
             .csrf(ServerHttpSecurity.CsrfSpec::disable)
-            .cors(cors -> cors.configurationSource(corsSource()))
+            .cors(ServerHttpSecurity.CorsSpec::disable)  // handled by corsWebFilter() bean above
             .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
             .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
             .addFilterBefore(jwtAuthFilter, SecurityWebFiltersOrder.AUTHENTICATION)
             .authorizeExchange(ex -> ex
+
+                // ── 0. Preflight — must be FIRST ──────────────────────────
+                .pathMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
                 // ── 1. PUBLIC — auth endpoints (NO token needed) ──────────
                 .pathMatchers(HttpMethod.POST,
@@ -93,26 +124,5 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder(12);
-    }
-
-    @Bean
-    public CorsConfigurationSource corsSource() {
-        List<String> origins = Arrays.stream(rawAllowedOrigins.split(","))
-            .map(String::trim)
-            .filter(s -> !s.isBlank())
-            .toList();
-
-        CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(origins);
-        config.setAllowedMethods(
-            List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        config.setAllowedHeaders(List.of("*"));
-        config.setAllowCredentials(true);
-        config.setMaxAge(3600L);
-
-        UrlBasedCorsConfigurationSource source =
-            new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config);
-        return source;
     }
 }
