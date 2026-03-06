@@ -67,7 +67,7 @@ sarvam:
 
 # ── CORS ──────────────────────────────────────────────────────────────────
 cors:
-  allowed-origins: "http://localhost:4200,${FRONTEND_URL:https://wmsai.netlify.app}"
+  allowed-origins: "${CORS_ALLOWED_ORIGINS:http://localhost:4200}"
 
 # ── AI Provider ───────────────────────────────────────────────────────────
 ai:
