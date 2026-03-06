@@ -1,0 +1,98 @@
+spring:
+  application:
+    name: wms-bot
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:default}
+
+  # ── Database ──────────────────────────────────────────────────────────────
+  datasource:
+    url: jdbc:postgresql://db.yhftnnhsptmuvpdxxrqc.supabase.co:5432/postgres?sslmode=require
+    username: ${DB_USER:postgres}
+    password: "${DB_PASSWORD:fh*y$&Y#4_j4@QT}" # FIXED: quoted — special chars safe
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      keepalive-time: 300000
+      connection-test-query: SELECT 1
+      initialization-fail-timeout: -1
+
+  # ── JPA ───────────────────────────────────────────────────────────────────
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    show-sql: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: Asia/Kolkata
+        format_sql: false
+        globally_quoted_identifiers: false
+
+  # ── SQL Init ──────────────────────────────────────────────────────────────
+  sql:
+    init:
+      mode: never
+
+# ── Server ────────────────────────────────────────────────────────────────
+server:
+  port: ${PORT:8080}
+  compression:
+    enabled: true
+
+# ── Ollama ────────────────────────────────────────────────────────────────
+ollama:
+  base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+  model: llama3.2:3b
+  temperature: 0.15
+  top_p: 0.85
+
+# ── Groq (Tier-2 cloud fallback) ──────────────────────────────────────────
+groq:
+  api-key: ${GROQ_API_KEY:}
+  base-url: https://api.groq.com/openai/v1
+  model: llama3-8b-8192
+  timeout: 8000
+
+# ── Sarvam AI ─────────────────────────────────────────────────────────────
+sarvam:
+  api:
+    key: ${SARVAM_API_KEY:}
+    base-url: "https://api.sarvam.ai" # FIXED: plain string, no markdown
+  model: sarvam-m
+  timeout: 5000
+
+# ── CORS ──────────────────────────────────────────────────────────────────
+cors:
+  allowed-origins: "http://localhost:4200,${FRONTEND_URL:https://wmsai.netlify.app}"
+
+# ── AI Provider ───────────────────────────────────────────────────────────
+ai:
+  provider: ${AI_PROVIDER:ollama}
+
+# ── Intent Config ─────────────────────────────────────────────────────────
+intent:
+  quick-response:
+    enabled: true
+
+# ── Actuator ──────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# ── Logging ───────────────────────────────────────────────────────────────
+logging:
+  level:
+    root: WARN
+    com.wnsai: INFO
+    org.springframework.web: WARN
+    com.zaxxer.hikari: WARN

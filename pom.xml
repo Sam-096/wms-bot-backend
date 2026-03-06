@@ -25,6 +25,12 @@
 
   <dependencies>
 
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+
+
     <!-- Reactive Web — WebFlux only, NOT spring-boot-starter-web -->
     <!-- Reason: having both web+webflux defaults to Servlet/MVC  -->
     <!-- which breaks SSE streaming and WebFlux security config   -->
@@ -79,6 +85,14 @@
       <groupId>org.projectlombok</groupId>
       <artifactId>lombok</artifactId>
       <optional>true</optional>
+    </dependency>
+
+    <!-- Hypersistence Utils — String[] / TEXT[] PostgreSQL mapping -->
+    <!-- Covers Hibernate 6.3+ (used by Spring Boot 3.3+)          -->
+    <dependency>
+      <groupId>io.hypersistence</groupId>
+      <artifactId>hypersistence-utils-hibernate-63</artifactId>
+      <version>3.9.0</version>
     </dependency>
 
     <!-- Testing                                                  -->

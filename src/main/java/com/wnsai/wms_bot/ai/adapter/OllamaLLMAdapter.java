@@ -1,52 +1,30 @@
 package com.wnsai.wms_bot.ai.adapter;
 
+import com.wnsai.wms_bot.ai.LLMFallbackChain;
 import com.wnsai.wms_bot.ai.port.ILLMEngine;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
-import java.util.List;
-import java.util.Map;
 
+/**
+ * ILLMEngine adapter that delegates all calls to the 3-tier LLMFallbackChain.
+ * Tier 1: Ollama (local) → Tier 2: Groq (cloud) → Tier 3: Rule-Based (always works).
+ */
+@Slf4j
 @Component("ollamaLLM")
 public class OllamaLLMAdapter implements ILLMEngine {
 
-    private static final Logger log = LoggerFactory.getLogger(OllamaLLMAdapter.class);
+    private final LLMFallbackChain chain;
 
-    private final WebClient client;
-    private final String    model;
-
-    public OllamaLLMAdapter(
-            @Value("${ollama.base-url:http://localhost:11434}") String baseUrl,
-            @Value("${ollama.model:llama3.2}")                  String model) {
-        this.model  = model;
-        this.client = WebClient.builder().baseUrl(baseUrl).build();
-        log.info("🦙 OllamaLLMAdapter init — baseUrl={}, model={}", baseUrl, model);
+    public OllamaLLMAdapter(LLMFallbackChain chain) {
+        this.chain = chain;
+        log.info("OllamaLLMAdapter init — backed by 3-tier fallback chain");
     }
 
     @Override
     public Flux<String> streamChat(String systemPrompt, String userMessage) {
-        return client.post()
-                .uri("/api/chat")
-                .bodyValue(Map.of(
-                        "model",    model,
-                        "stream",   true,
-                        "messages", List.of(
-                                Map.of("role", "system",  "content", systemPrompt),
-                                Map.of("role", "user",    "content", userMessage)
-                        )
-                ))
-                .retrieve()
-                .bodyToFlux(String.class)
-                .filter(line -> line.contains("\"content\""))
-                .map(this::extractToken)
-                .filter(t -> !t.isEmpty())
-                .onErrorResume(e -> {
-                    log.error("❌ Ollama unavailable: {}", e.getMessage());
-                    return Flux.just("Ollama not available on this server.");
-                });
+        String language = detectLanguage(userMessage);
+        return chain.stream(systemPrompt, userMessage, language);
     }
 
     @Override
@@ -56,13 +34,13 @@ public class OllamaLLMAdapter implements ILLMEngine {
                 .block();
     }
 
-    private String extractToken(String json) {
-        try {
-            int start = json.indexOf("\"content\":\"") + 11;
-            int end   = json.indexOf("\"", start);
-            return (start > 10 && end > start) ? json.substring(start, end) : "";
-        } catch (Exception e) {
-            return "";
+    /** Detect language from Unicode ranges — Telugu (0C00–0C7F), Hindi (0900–097F). */
+    private String detectLanguage(String message) {
+        if (message == null) return "en";
+        for (char c : message.toCharArray()) {
+            if (c >= '\u0C00' && c <= '\u0C7F') return "te";
+            if (c >= '\u0900' && c <= '\u097F') return "hi";
         }
+        return "en";
     }
 }
