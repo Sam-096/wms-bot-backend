@@ -1,6 +1,7 @@
 package com.wnsai.wms_bot.controller;
 
 import com.wnsai.wms_bot.dto.auth.*;
+import com.wnsai.wms_bot.exception.InvalidCredentialsException;
 import com.wnsai.wms_bot.security.JwtUtil;
 import com.wnsai.wms_bot.service.auth.AuthService;
 import jakarta.validation.Valid;
@@ -35,10 +36,11 @@ public class AuthController {
         log.debug("POST /api/v1/auth/login email={}", request.email());
         return authService.login(request)
                 .map(ResponseEntity::ok)
-                .onErrorResume(ex -> {
-                    log.warn("Login failed for {}: {}", request.email(), ex.getMessage());
+                .onErrorResume(InvalidCredentialsException.class, ex -> {
+                    log.warn("Login failed — bad credentials: email={}", request.email());
                     return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
                 });
+        // All other exceptions (DB errors, NPE, etc.) propagate to GlobalExceptionHandler → 500
     }
 
     /** POST /api/v1/auth/refresh */
