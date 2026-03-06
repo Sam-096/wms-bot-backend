@@ -107,6 +107,23 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    public Mono<Void> changePassword(String userId, ChangePasswordRequest req) {
+        return Mono.fromRunnable(() -> {
+            UUID id   = UUID.fromString(userId);
+            User user = userRepository.findById(id)
+                    .orElseThrow(() -> new EntityNotFoundException("User", userId));
+
+            if (!passwordEncoder.matches(req.currentPassword(), user.getPasswordHash())) {
+                throw new InvalidCredentialsException();
+            }
+
+            String newHash = passwordEncoder.encode(req.newPassword());
+            userRepository.updatePassword(id, newHash);
+            log.info("Password changed: userId={}", userId);
+        }).subscribeOn(Schedulers.boundedElastic()).then();
+    }
+
+    @Override
     public Mono<Void> logout(String userId) {
         return Mono.fromRunnable(() -> {
             try {

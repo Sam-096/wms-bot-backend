@@ -82,6 +82,7 @@ public class SecurityConfig {
                 .pathMatchers("/api/bot/**").permitAll()
 
                 // ── 2. PROTECTED — auth management (token required) ───────
+                .pathMatchers(HttpMethod.PUT,   "/api/v1/auth/change-password").authenticated()
                 .pathMatchers(HttpMethod.POST,  "/api/v1/auth/logout").authenticated()
                 .pathMatchers(HttpMethod.GET,   "/api/v1/auth/me").authenticated()
 

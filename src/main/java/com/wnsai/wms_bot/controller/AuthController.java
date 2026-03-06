@@ -50,6 +50,16 @@ public class AuthController {
         return authService.refresh(request);
     }
 
+    /** PUT /api/v1/auth/change-password — requires valid JWT */
+    @PutMapping("/change-password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public Mono<Void> changePassword(
+            @AuthenticationPrincipal String userId,
+            @Valid @RequestBody ChangePasswordRequest request) {
+        log.debug("PUT /api/v1/auth/change-password userId={}", userId);
+        return authService.changePassword(userId, request);
+    }
+
     /** POST /api/v1/auth/logout */
     @PostMapping("/logout")
     @ResponseStatus(HttpStatus.NO_CONTENT)

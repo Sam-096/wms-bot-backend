@@ -9,4 +9,5 @@ public interface AuthService {
     Mono<AuthResponse> refresh(RefreshRequest request);
     Mono<Void>         logout(String userId);
     Mono<MeResponse>   me(String userId);
+    Mono<Void>         changePassword(String userId, ChangePasswordRequest request);
 }

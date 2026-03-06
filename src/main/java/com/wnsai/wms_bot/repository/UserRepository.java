@@ -34,4 +34,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Transactional
     @Query("UPDATE User u SET u.lastLogin = :loginTime WHERE u.id = :id")
     void updateLastLogin(@Param("id") UUID id, @Param("loginTime") OffsetDateTime loginTime);
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE User u SET u.passwordHash = :hash WHERE u.id = :id")
+    void updatePassword(@Param("id") UUID id, @Param("hash") String hash);
 }
