@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Date;
 import java.util.UUID;
@@ -23,16 +24,46 @@ public class JwtUtil {
     private final long      refreshExpiryMs;
 
     public JwtUtil(
-            @Value("${jwt.secret}")                   String secret,
-            @Value("${jwt.expiry-hours:24}")          long expiryHours,
-            @Value("${jwt.refresh-expiry-days:7}")    long refreshDays) {
-        this.signingKey      = Keys.hmacShaKeyFor(Base64.getDecoder().decode(secret));
+            @Value("${jwt.secret}")                String secret,
+            @Value("${jwt.expiry-hours:24}")       long expiryHours,
+            @Value("${jwt.refresh-expiry-days:7}") long refreshDays) {
+
+        this.signingKey      = Keys.hmacShaKeyFor(resolveKeyBytes(secret));
         this.accessExpiryMs  = expiryHours * 3600 * 1000L;
         this.refreshExpiryMs = refreshDays * 24 * 3600 * 1000L;
+
+        log.info("JwtUtil initialized — accessExpiry={}h refreshExpiry={}d",
+                expiryHours, refreshDays);
+    }
+
+    /**
+     * Resolves secret to key bytes.
+     * Tries Base64 decode first; falls back to raw UTF-8 bytes.
+     * Validates minimum 32-byte (256-bit) length for HS256.
+     */
+    private static byte[] resolveKeyBytes(String secret) {
+        byte[] keyBytes;
+        try {
+            keyBytes = Base64.getDecoder().decode(secret);
+            log.debug("JwtUtil: secret decoded as Base64 ({} bytes)", keyBytes.length);
+        } catch (IllegalArgumentException e) {
+            // Plain-text secret — use UTF-8 bytes directly
+            keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+            log.debug("JwtUtil: secret used as plain UTF-8 ({} bytes)", keyBytes.length);
+        }
+
+        if (keyBytes.length < 32) {
+            throw new IllegalArgumentException(
+                "JWT_SECRET too short (" + keyBytes.length +
+                " bytes). Minimum 32 bytes (256 bits) required for HS256.");
+        }
+
+        return keyBytes;
     }
 
     /** Generate a short-lived access token. */
-    public String generateAccessToken(UUID userId, String email, String role, String warehouseId) {
+    public String generateAccessToken(UUID userId, String email,
+                                       String role, String warehouseId) {
         Date now = new Date();
         return Jwts.builder()
                 .subject(userId.toString())
