@@ -1,26 +1,19 @@
 spring:
-  application:
-    name: wms-bot
-  profiles:
-    active: ${SPRING_PROFILES_ACTIVE:default}
-
-  # ── Database ──────────────────────────────────────────────────────────────
   datasource:
-    url: jdbc:postgresql://db.yhftnnhsptmuvpdxxrqc.supabase.co:5432/postgres?sslmode=require
-    username: ${DB_USER:postgres}
-    password: "${DB_PASSWORD:fh*y$&Y#4_j4@QT}" # FIXED: quoted — special chars safe
+    url: "${DB_URL}"
+    username: "${DB_USER}"
+    password: "${DB_PASSWORD}"
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 5
+      maximum-pool-size: 3
       minimum-idle: 1
-      connection-timeout: 30000
-      idle-timeout: 600000
-      max-lifetime: 1800000
-      keepalive-time: 300000
+      connection-timeout: 20000
+      idle-timeout: 300000
+      max-lifetime: 900000
+      keepalive-time: 60000
       connection-test-query: SELECT 1
       initialization-fail-timeout: -1
 
-  # ── JPA ───────────────────────────────────────────────────────────────────
   jpa:
     hibernate:
       ddl-auto: none
@@ -28,12 +21,12 @@ spring:
     show-sql: false
     properties:
       hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
         jdbc:
-          time_zone: Asia/Kolkata
-        format_sql: false
-        globally_quoted_identifiers: false
+          time_zone: UTC
+        temp:
+          use_jdbc_metadata_defaults: false
 
-  # ── SQL Init ──────────────────────────────────────────────────────────────
   sql:
     init:
       mode: never
