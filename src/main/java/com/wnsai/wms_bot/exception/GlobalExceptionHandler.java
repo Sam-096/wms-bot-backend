@@ -64,6 +64,43 @@ public class GlobalExceptionHandler {
             .body(error(HttpStatus.OK, "Intent unclear — please rephrase your question.")));
     }
 
+    // ── Entity not found ──────────────────────────────────────────────────────
+    @ExceptionHandler(EntityNotFoundException.class)
+    public Mono<ResponseEntity<Map<String, Object>>> handleNotFound(EntityNotFoundException ex) {
+        log.warn("Entity not found: {}", ex.getMessage());
+        return Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(error(HttpStatus.NOT_FOUND, ex.getMessage())));
+    }
+
+    // ── Insufficient stock ────────────────────────────────────────────────────
+    @ExceptionHandler(InsufficientStockException.class)
+    public Mono<ResponseEntity<Map<String, Object>>> handleStock(InsufficientStockException ex) {
+        log.warn("Insufficient stock: {}", ex.getMessage());
+        return Mono.just(ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+            .body(error(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage())));
+    }
+
+    // ── Invalid credentials ───────────────────────────────────────────────────
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public Mono<ResponseEntity<Map<String, Object>>> handleAuth(InvalidCredentialsException ex) {
+        log.warn("Invalid credentials attempt");
+        return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+            .body(Map.of(
+                "error", "Invalid credentials",
+                "code",  "AUTH_FAILED",
+                "timestamp", Instant.now().toString()
+            )));
+    }
+
+    // ── Access denied ─────────────────────────────────────────────────────────
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public Mono<ResponseEntity<Map<String, Object>>> handleAccess(
+            org.springframework.security.access.AccessDeniedException ex) {
+        log.warn("Access denied: {}", ex.getMessage());
+        return Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN)
+            .body(error(HttpStatus.FORBIDDEN, "Access denied — insufficient permissions")));
+    }
+
     // ── Catch-all ─────────────────────────────────────────────────────────────
     @ExceptionHandler(Exception.class)
     public Mono<ResponseEntity<Map<String, Object>>> handleGeneric(Exception ex) {

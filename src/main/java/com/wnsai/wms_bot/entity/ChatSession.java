@@ -41,4 +41,16 @@ public class ChatSession {
     @Column(name = "message_count")
     @Builder.Default
     private Integer messageCount = 0;
+
+    // ── Fields added by V2 migration ─────────────────────────────────────────
+
+    @Column(name = "title", length = 100)
+    private String title;
+
+    @Column(name = "is_deleted")
+    @Builder.Default
+    private Boolean isDeleted = false;
+
+    @Column(name = "user_id")
+    private UUID userId;
 }

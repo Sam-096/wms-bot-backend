@@ -22,6 +22,24 @@ public record ChatRequest(
     String warehouseId,
 
     @Size(max = 100)
-    String sessionId
+    String sessionId,
 
-) {}
+    /** Optional: human-readable warehouse name for richer AI prompts */
+    @Size(max = 150)
+    String warehouseName,
+
+    /**
+     * Optional snapshot of current warehouse state injected by the frontend.
+     * Helps the AI give context-aware responses without an extra DB round-trip.
+     */
+    ChatContext context
+
+) {
+    /** Lightweight context snapshot — all fields optional/nullable */
+    public record ChatContext(
+        Long    pendingInward,
+        Long    pendingOutward,
+        Long    lowStockCount,
+        Integer openGatePasses
+    ) {}
+}

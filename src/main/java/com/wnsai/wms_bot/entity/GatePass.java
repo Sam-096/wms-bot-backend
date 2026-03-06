@@ -47,4 +47,24 @@ public class GatePass {
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
+
+    // ── Fields added by V2 migration ─────────────────────────────────────────
+
+    @Column(name = "purpose", length = 50)
+    private String purpose;
+
+    @Column(name = "commodity_name", length = 200)
+    private String commodityName;
+
+    @Column(name = "bags_count")
+    private Integer bagsCount;
+
+    @Column(name = "operator_id")
+    private UUID operatorId;
+
+    @Column(name = "inward_transaction_id")
+    private UUID inwardTransactionId;
+
+    @Column(name = "outward_transaction_id")
+    private UUID outwardTransactionId;
 }

@@ -1,0 +1,79 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Production profile — overrides from application.yml
+# Active via: SPRING_PROFILES_ACTIVE=production
+# All secrets must be set as environment variables on Render.
+# ─────────────────────────────────────────────────────────────────────────────
+
+spring:
+  jpa:
+    show-sql: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        temp:
+          use_jdbc_metadata_defaults: false
+  datasource:
+    hikari:
+      maximum-pool-size: 5       # Supabase free tier: keep ≤ 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+server:
+  port: ${PORT:8080}
+  compression:
+    enabled: true
+  http2:
+    enabled: true
+
+# ── JWT (mandatory in production) ─────────────────────────────────────────
+jwt:
+  secret: ${JWT_SECRET}           # MUST be set — minimum 32 bytes Base64-encoded
+  expiry-hours: 24
+  refresh-expiry-days: 7
+
+# ── Ollama (typically unavailable in cloud — Groq takes over) ─────────────
+ollama:
+  base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+  model: llama3.2:3b
+  temperature: 0.15
+  top_p: 0.85
+
+# ── Groq (primary cloud LLM for Render deployment) ────────────────────────
+groq:
+  api-key: ${GROQ_API_KEY}
+  base-url: https://api.groq.com/openai/v1
+  model: llama3-8b-8192
+  timeout: 8000
+
+# ── Sarvam ────────────────────────────────────────────────────────────────
+sarvam:
+  api:
+    key: ${SARVAM_API_KEY:}
+    base-url: "https://api.sarvam.ai"
+  model: sarvam-m
+  timeout: 5000
+
+# ── CORS ──────────────────────────────────────────────────────────────────
+cors:
+  allowed-origins: "${FRONTEND_URL:https://wmsai.netlify.app}"
+
+# ── Actuator (limited exposure in production) ─────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+# ── Logging (minimal in production) ───────────────────────────────────────
+logging:
+  level:
+    root: WARN
+    com.wnsai: INFO
+    org.springframework.web: WARN
+    com.zaxxer.hikari: WARN

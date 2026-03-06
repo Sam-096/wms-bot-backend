@@ -54,4 +54,27 @@ public class OutwardTransaction {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
+
+    // ── Fields added by V2 migration ─────────────────────────────────────────
+
+    @Column(name = "vehicle_number", length = 30)
+    private String vehicleNumber;
+
+    @Column(name = "quantity_bags")
+    private Integer quantityBags;
+
+    @Column(name = "unit_weight", precision = 10, scale = 3)
+    private BigDecimal unitWeight;
+
+    @Column(name = "total_weight", precision = 12, scale = 3)
+    private BigDecimal totalWeight;
+
+    @Column(name = "remarks", columnDefinition = "TEXT")
+    private String remarks;
+
+    @Column(name = "approved_by")
+    private UUID approvedBy;
+
+    @Column(name = "approved_at")
+    private OffsetDateTime approvedAt;
 }

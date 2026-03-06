@@ -51,4 +51,18 @@ public class ChatMessage {
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
+
+    // ── Fields added by V2 migration ─────────────────────────────────────────
+
+    /** TEXT | TABLE | CHART | REPORT | ACTION | ALERT | LIST */
+    @Column(name = "response_type", length = 20)
+    @Builder.Default
+    private String responseType = "TEXT";
+
+    /** OLLAMA | GROQ | RULE_BASED */
+    @Column(name = "ai_provider", length = 20)
+    private String aiProvider;
+
+    @Column(name = "processing_time_ms")
+    private Integer processingTimeMs;
 }
