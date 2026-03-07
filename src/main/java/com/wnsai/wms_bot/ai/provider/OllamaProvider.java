@@ -24,20 +24,27 @@ public class OllamaProvider implements LLMProvider {
 
     private final WebClient client;
     private final String    model;
+    private final boolean   enabled;
 
     public OllamaProvider(
             @Value("${ollama.base-url:http://localhost:11434}") String baseUrl,
-            @Value("${ollama.model:llama3.2:3b}")               String model) {
-        this.model  = model;
-        this.client = WebClient.builder()
+            @Value("${ollama.model:llama3.2:3b}")               String model,
+            @Value("${ollama.enabled:true}")                    boolean enabled) {
+        this.model   = model;
+        this.enabled = enabled;
+        this.client  = WebClient.builder()
                 .baseUrl(baseUrl)
                 .codecs(c -> c.defaultCodecs().maxInMemorySize(4 * 1024 * 1024))
                 .build();
-        log.info("OllamaProvider init — baseUrl={}, model={}", baseUrl, model);
+        log.info("OllamaProvider init — baseUrl={}, model={}, enabled={}", baseUrl, model, enabled);
     }
 
     @PostConstruct
     void checkModelAvailability() {
+        if (!enabled) {
+            log.info("OllamaProvider: disabled via ollama.enabled=false — skipping availability check");
+            return;
+        }
         try {
             String tags = client.get()
                     .uri("/api/tags")
@@ -63,6 +70,9 @@ public class OllamaProvider implements LLMProvider {
 
     @Override
     public Flux<String> stream(String systemPrompt, String userMessage, String language) {
+        if (!enabled) {
+            return Flux.error(new IllegalStateException("Ollama disabled — falling through to Tier 2"));
+        }
         return client.post()
                 .uri("/api/chat")
                 .bodyValue(Map.of(

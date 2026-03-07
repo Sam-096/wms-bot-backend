@@ -46,7 +46,8 @@ public class GroqProvider implements LLMProvider {
                 .build();
 
         if (apiKey == null || apiKey.isBlank()) {
-            log.info("GroqProvider: GROQ_API_KEY not set — Tier 2 disabled.");
+            log.warn("GroqProvider: GROQ_API_KEY not set — Tier 2 disabled. " +
+                     "Set GROQ_API_KEY env var on Render to enable cloud AI.");
         } else {
             log.info("GroqProvider init — baseUrl={}, model={}", baseUrl, model);
         }

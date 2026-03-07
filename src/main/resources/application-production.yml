@@ -34,8 +34,9 @@ jwt:
   expiry-hours: 24
   refresh-expiry-days: 7
 
-# ── Ollama (typically unavailable in cloud — Groq takes over) ─────────────
+# ── Ollama (disabled in cloud — Groq takes over immediately) ──────────────
 ollama:
+  enabled: false
   base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
   model: llama3.2:3b
   temperature: 0.15
@@ -43,7 +44,7 @@ ollama:
 
 # ── Groq (primary cloud LLM for Render deployment) ────────────────────────
 groq:
-  api-key: ${GROQ_API_KEY}
+  api-key: ${GROQ_API_KEY:}
   base-url: https://api.groq.com/openai/v1
   model: llama3-8b-8192
   timeout: 8000

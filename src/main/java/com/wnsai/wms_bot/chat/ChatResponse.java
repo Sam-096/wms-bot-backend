@@ -1,5 +1,6 @@
 package com.wnsai.wms_bot.chat;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
@@ -14,6 +15,7 @@ import java.util.Map;
  * type=ERROR      → content carries error code
  * type=TABLE      → structured data; data field carries rows
  */
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public record ChatResponse(
     String       type,           // INSTANT | NAVIGATION | TOKEN | DONE | ERROR | TABLE
     String       content,        // text payload (null for DONE/TABLE)
