@@ -91,7 +91,7 @@ public class SecurityConfig {
                     .hasRole("ADMIN")
 
                 // ── 4. ROLE-BASED endpoints ───────────────────────────────
-                .pathMatchers(HttpMethod.POST, "/api/v1/chat")
+                .pathMatchers(HttpMethod.POST, "/api/v1/chat", "/api/v1/chat/stream")
                     .hasAnyRole("ADMIN", "MANAGER", "OPERATOR", "GATE_STAFF", "VIEWER")
 
                 .pathMatchers(HttpMethod.GET, "/api/v1/dashboard/snapshot")

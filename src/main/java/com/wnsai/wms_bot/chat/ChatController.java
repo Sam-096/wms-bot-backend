@@ -113,7 +113,7 @@ public class ChatController {
     // ─── Primary SSE chat endpoint ────────────────────────────────────────────
 
     @PostMapping(
-        value    = "/chat",
+        value    = {"/chat", "/chat/stream"},
         produces = MediaType.TEXT_EVENT_STREAM_VALUE
     )
     public Flux<ServerSentEvent<String>> chat(
