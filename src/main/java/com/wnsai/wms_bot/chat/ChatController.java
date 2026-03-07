@@ -18,6 +18,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -30,21 +31,76 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * POST /api/v1/chat            — SSE stream (text/event-stream)
- * GET  /api/v1/chat/sessions   — list sessions for a warehouse
- * PUT  /api/v1/chat/sessions/{id}/title  — rename session
- * DELETE /api/v1/chat/sessions/{id}      — soft-delete session
- * GET  /api/v1/chat/sessions/{id}/messages — messages in session
- * POST /api/v1/chat/messages/{msgId}/feedback — helpful feedback
+ * ════════════════════════════════════════════════════════════
+ * POST /api/v1/chat  — SSE stream (text/event-stream)
+ * ════════════════════════════════════════════════════════════
+ *
+ * REQUEST:
+ * {
+ *   "message":       "string",          required, max 500 chars
+ *   "sessionId":     "string",          optional
+ *   "warehouseId":   "string",          optional
+ *   "warehouseName": "string",          optional
+ *   "language":      "en|te|hi|...",    optional
+ *   "context": {                        optional — injected by frontend
+ *     "pendingInward":   0,
+ *     "pendingOutward":  0,
+ *     "lowStockCount":   0,
+ *     "openGatePasses":  0
+ *   }
+ * }
+ * NOTE: "role" and "userId" are extracted SERVER-SIDE from JWT — client values ignored.
+ *
+ * ════════════════════════════════════════════════════════════
+ * SSE EVENT CONTRACTS (Frontend must handle all types):
+ * ════════════════════════════════════════════════════════════
+ *
+ * TOKEN — streaming word chunk:
+ * { "type": "TOKEN", "content": "Here is" }
+ *
+ * INSTANT — complete non-streamed reply:
+ * { "type": "INSTANT", "responseType": "TEXT",  "content": "Here is your stock summary..." }
+ * { "type": "INSTANT", "responseType": "TABLE", "data": [...] }
+ * { "type": "INSTANT", "responseType": "LIST",  "data": [...] }
+ *
+ * NAVIGATION — redirect the user to a route:
+ * { "type": "NAVIGATION", "content": "Going to Bonds", "route": "/bonds" }
+ *
+ * ACCESS_DENIED — role lacks permission:
+ * {
+ *   "type": "ACCESS_DENIED",
+ *   "content": "You don't have access to user management.",
+ *   "responseType": "ACTION",
+ *   "data": [{ "label": "Go to Dashboard", "route": "/dashboard" }]
+ * }
+ *
+ * DONE — end of stream:
+ * { "type": "DONE", "intent": "AI_QUERY", "aiProvider": "OLLAMA", "processingTimeMs": 1234 }
+ *
+ * ERROR — pipeline failure:
+ * { "type": "ERROR", "content": "AI_OFFLINE" }
+ *
+ * ════════════════════════════════════════════════════════════
+ * FRONTEND INTEGRATION VALUES:
+ *   A) Role field in login response:  "role"
+ *   B) JWT claim name for role:       "role"
+ *   C) Chat endpoint URL:             POST /api/v1/chat
+ *      Accept: text/event-stream
+ *      Authorization: Bearer <token>
+ * ════════════════════════════════════════════════════════════
+ *
+ * Other endpoints:
+ * GET    /api/v1/chat/sessions                      — list sessions
+ * PUT    /api/v1/chat/sessions/{id}/title           — rename session
+ * DELETE /api/v1/chat/sessions/{id}                 — soft-delete
+ * GET    /api/v1/chat/sessions/{id}/messages        — message history
+ * POST   /api/v1/chat/messages/{msgId}/feedback     — helpful feedback
  */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1")
-@CrossOrigin(origins = {
-    "http://localhost:4200",
-    "https://wmsai.netlify.app"
-})
 @RequiredArgsConstructor
+// NOTE: @CrossOrigin removed — CORS is handled globally by CorsWebFilter bean in SecurityConfig
 public class ChatController {
 
     private final ChatOrchestrator       orchestrator;
@@ -60,19 +116,34 @@ public class ChatController {
         value    = "/chat",
         produces = MediaType.TEXT_EVENT_STREAM_VALUE
     )
-    public Flux<ServerSentEvent<String>> chat(@Valid @RequestBody ChatRequest req) {
-        log.info("POST /api/v1/chat sessionId={} lang={} role={} warehouseId={}",
-            req.sessionId(), req.language(), req.role(), req.warehouseId());
+    public Flux<ServerSentEvent<String>> chat(
+            @Valid @RequestBody ChatRequest req,
+            Authentication authentication) {
+
+        // ── Extract role + userId from JWT (server-side — cannot be spoofed) ──
+        String jwtRole   = extractRole(authentication);
+        String jwtUserId = extractUserId(authentication);
+
+        // Build a secure request overriding any client-supplied role/userId
+        ChatRequest secureReq = new ChatRequest(
+            req.message(), req.language(), jwtRole,
+            req.warehouseId(), req.sessionId(), req.warehouseName(),
+            req.context(), jwtUserId
+        );
+
+        log.info("POST /api/v1/chat sessionId={} lang={} jwtRole={} warehouseId={} userId={}",
+            secureReq.sessionId(), secureReq.language(), jwtRole,
+            secureReq.warehouseId(), jwtUserId);
 
         long startMs = System.currentTimeMillis();
 
-        String detectedIntent = intentClassifier.classify(req.message()).type().name();
-        double confidence     = intentClassifier.classify(req.message()).confidence();
+        String detectedIntent = intentClassifier.classify(secureReq.message()).type().name();
+        double confidence     = intentClassifier.classify(secureReq.message()).confidence();
 
         AtomicReference<StringBuilder> responseBuffer = new AtomicReference<>(new StringBuilder());
         AtomicLong                     firstTokenMs   = new AtomicLong(0);
 
-        return orchestrator.handle(req)
+        return orchestrator.handle(secureReq)
             .doOnNext(response -> {
                 if (response.content() != null) {
                     if ("TOKEN".equals(response.type()) || "INSTANT".equals(response.type())) {
@@ -85,7 +156,7 @@ public class ChatController {
                 .event("message")
                 .data(toJson(response))
                 .build())
-            .doFinally(signal -> persistAsync(req, detectedIntent, confidence,
+            .doFinally(signal -> persistAsync(secureReq, detectedIntent, confidence,
                 responseBuffer.get().toString(),
                 System.currentTimeMillis() - startMs))
             .onErrorResume(e -> {
@@ -100,12 +171,8 @@ public class ChatController {
 
     // ─── Session management ───────────────────────────────────────────────────
 
-    /**
-     * GET /api/v1/chat/sessions?warehouseId=WH001&page=0&size=20
-     * Returns non-deleted sessions for the warehouse, newest first.
-     */
     @GetMapping("/chat/sessions")
-    @PreAuthorize("hasAnyRole('MANAGER','OPERATOR','VIEWER')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','OPERATOR','VIEWER','GATE_STAFF')")
     public Mono<Page<ChatSession>> listSessions(
             @RequestParam                      String warehouseId,
             @RequestParam(defaultValue = "0")  int page,
@@ -116,12 +183,8 @@ public class ChatController {
         ).subscribeOn(Schedulers.boundedElastic());
     }
 
-    /**
-     * PUT /api/v1/chat/sessions/{sessionId}/title
-     * Body: {"title": "Morning Dispatch"}
-     */
     @PutMapping("/chat/sessions/{sessionId}/title")
-    @PreAuthorize("hasAnyRole('MANAGER','OPERATOR')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','OPERATOR')")
     public Mono<Void> renameSession(
             @PathVariable String sessionId,
             @RequestBody  Map<String, String> body) {
@@ -131,38 +194,25 @@ public class ChatController {
                    .then();
     }
 
-    /**
-     * DELETE /api/v1/chat/sessions/{sessionId}
-     * Soft-deletes the session (sets is_deleted = true).
-     */
     @DeleteMapping("/chat/sessions/{sessionId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasAnyRole('MANAGER','OPERATOR')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','OPERATOR')")
     public Mono<Void> deleteSession(@PathVariable String sessionId) {
         return Mono.fromRunnable(() -> chatSessionRepo.softDelete(sessionId))
                    .subscribeOn(Schedulers.boundedElastic())
                    .then();
     }
 
-    /**
-     * GET /api/v1/chat/sessions/{sessionId}/messages
-     * Returns all messages in the session, ordered by creation time (JPA default).
-     */
     @GetMapping("/chat/sessions/{sessionId}/messages")
-    @PreAuthorize("hasAnyRole('MANAGER','OPERATOR','VIEWER')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','OPERATOR','VIEWER','GATE_STAFF')")
     public Mono<List<ChatMessage>> getMessages(@PathVariable String sessionId) {
         return Mono.fromCallable(() -> chatMessageRepo.findBySessionId(sessionId))
                    .subscribeOn(Schedulers.boundedElastic());
     }
 
-    /**
-     * POST /api/v1/chat/messages/{messageId}/feedback
-     * Body: {"helpful": true}
-     * Marks a message as helpful or not — used for training data collection.
-     */
     @PostMapping("/chat/messages/{messageId}/feedback")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasAnyRole('MANAGER','OPERATOR','VIEWER')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','OPERATOR','VIEWER','GATE_STAFF')")
     public Mono<Void> submitFeedback(
             @PathVariable UUID messageId,
             @RequestBody  Map<String, Boolean> body) {
@@ -170,6 +220,28 @@ public class ChatController {
         return Mono.fromRunnable(() -> chatMessageRepo.updateFeedback(messageId, helpful))
                    .subscribeOn(Schedulers.boundedElastic())
                    .then();
+    }
+
+    // ─── JWT extraction helpers ───────────────────────────────────────────────
+
+    /**
+     * Extracts role from the JWT-backed Authentication object.
+     * JwtAuthFilter stores authorities as "ROLE_MANAGER" etc.
+     * We strip the prefix to get plain role: "MANAGER".
+     */
+    private String extractRole(Authentication auth) {
+        if (auth == null || auth.getAuthorities() == null || auth.getAuthorities().isEmpty()) {
+            return "VIEWER";
+        }
+        return auth.getAuthorities().stream()
+                .findFirst()
+                .map(ga -> ga.getAuthority().replace("ROLE_", ""))
+                .orElse("VIEWER");
+    }
+
+    private String extractUserId(Authentication auth) {
+        if (auth == null || auth.getPrincipal() == null) return null;
+        return auth.getPrincipal().toString();
     }
 
     // ─── Async DB persistence ─────────────────────────────────────────────────

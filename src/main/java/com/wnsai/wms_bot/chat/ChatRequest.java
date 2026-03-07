@@ -32,7 +32,14 @@ public record ChatRequest(
      * Optional snapshot of current warehouse state injected by the frontend.
      * Helps the AI give context-aware responses without an extra DB round-trip.
      */
-    ChatContext context
+    ChatContext context,
+
+    /**
+     * Injected server-side from JWT — never trusted from request body.
+     * ChatController overwrites whatever the client sends here.
+     */
+    @Size(max = 36)
+    String userId
 
 ) {
     /** Lightweight context snapshot — all fields optional/nullable */

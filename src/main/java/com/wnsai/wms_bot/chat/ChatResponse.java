@@ -2,6 +2,7 @@ package com.wnsai.wms_bot.chat;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * SSE response envelope.
@@ -80,6 +81,26 @@ public record ChatResponse(
     public static ChatResponse list(Object data, String intent, List<String> suggestions) {
         return new ChatResponse("INSTANT", null, null, "LIST", intent, null,
                 data, suggestions, null, null, null, null, now());
+    }
+
+    /**
+     * Access denied — role lacks permission for the requested action.
+     * Frontend renders this as a blocked-action card with navigation buttons.
+     *
+     * Example payload:
+     * {
+     *   "type": "ACCESS_DENIED",
+     *   "content": "You don't have access to user management.",
+     *   "responseType": "ACTION",
+     *   "data": [
+     *     {"label": "Go to Dashboard", "route": "/dashboard"}
+     *   ]
+     * }
+     */
+    public static ChatResponse accessDenied(String message, List<Map<String, String>> actions) {
+        return new ChatResponse("ACCESS_DENIED", message, null, "ACTION",
+                "ACCESS_CONTROL", null, actions, null, null, null,
+                "RULE_BASED", null, now());
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────

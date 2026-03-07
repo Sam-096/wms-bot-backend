@@ -6,6 +6,7 @@ import com.wnsai.wms_bot.exception.EntityNotFoundException;
 import com.wnsai.wms_bot.exception.InvalidCredentialsException;
 import com.wnsai.wms_bot.repository.UserRepository;
 import com.wnsai.wms_bot.security.JwtUtil;
+import com.wnsai.wms_bot.service.AuditLogService;
 import com.wnsai.wms_bot.service.auth.AuthService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,9 +23,10 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
-    private final UserRepository userRepository;
-    private final JwtUtil        jwtUtil;
+    private final UserRepository  userRepository;
+    private final JwtUtil         jwtUtil;
     private final PasswordEncoder passwordEncoder;
+    private final AuditLogService auditLogService;
 
     @Override
     public Mono<AuthResponse> register(RegisterRequest req) {
@@ -50,6 +52,7 @@ public class AuthServiceImpl implements AuthService {
                     .build();
 
             user = userRepository.save(user);
+            auditLogService.logRegistration(user.getId().toString(), user.getEmail(), user.getRole(), "service");
             log.info("User registered: userId={} role={}", user.getId(), user.getRole());
 
             String accessToken = jwtUtil.generateAccessToken(
@@ -65,12 +68,17 @@ public class AuthServiceImpl implements AuthService {
             log.debug("Login attempt: email={}", req.email());
 
             User user = userRepository.findByEmail(req.email())
-                    .orElseThrow(InvalidCredentialsException::new);
+                    .orElseThrow(() -> {
+                        auditLogService.logLoginFailure(req.email(), "service");
+                        return new InvalidCredentialsException();
+                    });
 
             if (!Boolean.TRUE.equals(user.getIsActive())) {
+                auditLogService.logLoginFailure(req.email(), "service");
                 throw new InvalidCredentialsException();
             }
             if (!passwordEncoder.matches(req.password(), user.getPasswordHash())) {
+                auditLogService.logLoginFailure(req.email(), "service");
                 throw new InvalidCredentialsException();
             }
 
@@ -81,6 +89,7 @@ public class AuthServiceImpl implements AuthService {
             String accessToken = jwtUtil.generateAccessToken(
                     user.getId(), user.getEmail(), user.getRole(), user.getWarehouseId());
 
+            auditLogService.logLoginSuccess(user.getId().toString(), user.getEmail(), user.getRole(), "service");
             log.info("Login successful: userId={}", user.getId());
             return buildAuthResponse(user, accessToken, refreshToken);
         }).subscribeOn(Schedulers.boundedElastic());
@@ -119,6 +128,7 @@ public class AuthServiceImpl implements AuthService {
 
             String newHash = passwordEncoder.encode(req.newPassword());
             userRepository.updatePassword(id, newHash);
+            auditLogService.logPasswordChange(userId, "service");
             log.info("Password changed: userId={}", userId);
         }).subscribeOn(Schedulers.boundedElastic()).then();
     }

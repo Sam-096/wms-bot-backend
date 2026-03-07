@@ -173,74 +173,124 @@ public class WMSPromptBuilder {
 
     private String getRole(String role) {
         if (role == null || role.isBlank()) return "ADMIN — full access all modules";
-        return switch (role.toLowerCase()) {
-            case "driver"     -> "TRUCK DRIVER — limited to gate operations";
-            case "gatekeeper" -> "GATE SECURITY — gate entry and exit only";
-            case "supervisor" -> "FLOOR SUPERVISOR — operations and QC";
-            case "qc_officer" -> "QC OFFICER — quality control modules";
-            case "manager"    -> "WAREHOUSE MANAGER — full warehouse operations";
-            case "accountant" -> "ACCOUNTANT — finance and billing";
-            case "lender"     -> "LENDER/BANK — bond value and loan eligibility";
-            case "auditor"    -> "AUDITOR — reports and compliance only (read-only)";
-            case "customer"   -> "DEPOSITOR/CUSTOMER — own stock and documents only";
+        return switch (role.toUpperCase()) {
+            case "ADMIN"      -> "ADMIN — full system access including user management and settings";
+            case "MANAGER"    -> "WAREHOUSE MANAGER — full warehouse operations, no user management";
+            case "OPERATOR"   -> "WAREHOUSE OPERATOR — inward, outward, gate passes only";
+            case "VIEWER"     -> "READ-ONLY VIEWER — view dashboard and reports only";
+            // Legacy granular roles (kept for backward compatibility)
+            case "DRIVER"     -> "TRUCK DRIVER — limited to gate operations";
+            case "GATEKEEPER" -> "GATE SECURITY — gate entry and exit only";
+            case "SUPERVISOR" -> "FLOOR SUPERVISOR — operations and QC";
+            case "QC_OFFICER" -> "QC OFFICER — quality control modules";
+            case "ACCOUNTANT" -> "ACCOUNTANT — finance and billing";
+            case "LENDER"     -> "LENDER/BANK — bond value and loan eligibility";
+            case "AUDITOR"    -> "AUDITOR — reports and compliance only (read-only)";
+            case "CUSTOMER"   -> "DEPOSITOR/CUSTOMER — own stock and documents only";
             default           -> "ADMIN — full access all modules";
         };
     }
 
     private String getRoleRestrictions(String role) {
-        if (role == null || role.isBlank()) return defaultAdminRestrictions();
-        return switch (role.toLowerCase()) {
-            case "driver" -> """
+        if (role == null || role.isBlank()) return adminRestrictions();
+        return switch (role.toUpperCase()) {
+
+            case "ADMIN" -> adminRestrictions();
+
+            case "MANAGER" -> """
+                You are a WMS assistant for a warehouse MANAGER.
+                You can help with: dashboard, inward, outward, gate operations, bonds, reports.
+                If asked about user management or system settings, respond with exactly this JSON:
+                {"type":"ACCESS_DENIED","content":"User management is restricted to administrators.",\
+"data":[{"label":"Go to Dashboard","route":"/dashboard"}]}
+                Never reveal user data or system configuration.
+
+                ✅ CAN ACCESS: Dashboard, Inward, Outward, Gate Operations, Bonds, Inventory, Reports, Documents
+                ❌ CANNOT ACCESS: User Management, Role Permissions, System Settings
+                🎯 FOCUS: Oversight, approvals, bond management, compliance
+                """;
+
+            case "OPERATOR" -> """
+                You are a WMS assistant for a warehouse OPERATOR.
+                You can ONLY help with: inward entries, outward entries, gate passes.
+                If asked about anything else respond with exactly this JSON:
+                {"type":"ACCESS_DENIED","content":"You don't have access to that feature. \
+Your available actions are Inward, Outward, Gate Pass.",\
+"data":[{"label":"New Inward","route":"/inward/new"},\
+{"label":"New Outward","route":"/outward/new"},\
+{"label":"Gate Pass","route":"/gate-operations"}]}
+
+                ✅ CAN ACCESS: Inward Entries, Outward Dispatch, Gate Passes
+                ❌ CANNOT ACCESS: Bonds, Reports, Finance, Settings, User Management, Dashboard analytics
+                🎯 FOCUS: Daily entry/exit operations only
+                """;
+
+            case "VIEWER" -> """
+                You are a WMS assistant for a READ-ONLY viewer.
+                You can ONLY help with viewing the dashboard and reports.
+                If the user tries to create or modify anything respond with exactly this JSON:
+                {"type":"ACCESS_DENIED","content":"You have read-only access. \
+Would you like to view the relevant report instead?",\
+"data":[{"label":"View Reports","route":"/reports"},\
+{"label":"Dashboard","route":"/dashboard"}]}
+
+                ✅ CAN ACCESS: Dashboard (view only), Reports (view only)
+                ❌ CANNOT ACCESS: Create/Edit anything — Inward, Outward, Gate Pass, Bonds, Settings
+                🎯 FOCUS: Help user find the right report or dashboard view
+                """;
+
+            // Legacy granular roles
+            case "DRIVER" -> """
                 ✅ CAN ACCESS: Gate Entry status, Gate Pass Out, Vehicle status, Parking slot
                 ❌ CANNOT ACCESS: Stock details, Bond info, Finance, Reports, Party data
-                🎯 FOCUS: Help with gate clearance, document checklist, waiting time
+                🎯 FOCUS: Gate clearance, document checklist, waiting time
                 """;
-            case "gatekeeper" -> """
+            case "GATEKEEPER" -> """
                 ✅ CAN ACCESS: Gate Entry, Gate Pass Out, Vehicle verification, Weighbridge
                 ❌ CANNOT ACCESS: Bond details, Finance, Inventory counts, Reports
                 🎯 FOCUS: Vehicle entry/exit, driver KYC, weight recording
                 """;
-            case "supervisor" -> """
+            case "SUPERVISOR" -> """
                 ✅ CAN ACCESS: Inward, Outward, Stack Cards, QC, Inventory, Daily reports
                 ❌ CANNOT ACCESS: Finance details, Bond creation, Party credit limits
                 🎯 FOCUS: Daily operations, stock movement, quality checks
                 """;
-            case "qc_officer" -> """
+            case "QC_OFFICER" -> """
                 ✅ CAN ACCESS: QC module (sampling, moisture, grading), Rejections, QC reports
                 ❌ CANNOT ACCESS: Finance, Bonds, Gate operations, Party management
                 🎯 FOCUS: Quality parameters, SOP compliance, rejection handling
                 """;
-            case "manager" -> """
-                ✅ CAN ACCESS: All Operations, QC, Bonds, Inventory, Documents, Reports
-                ❌ CANNOT ACCESS: System settings, User management, Role permissions
-                🎯 FOCUS: Oversight, approvals, bond management, compliance
-                """;
-            case "accountant" -> """
+            case "ACCOUNTANT" -> """
                 ✅ CAN ACCESS: Finance (Invoices, Payments, Rent), GST, Outstanding, Party ledger
                 ❌ CANNOT ACCESS: Operations details, QC, Stock movement
                 🎯 FOCUS: Billing, collections, receivables, tax compliance
                 """;
-            case "lender" -> """
+            case "LENDER" -> """
                 ✅ CAN ACCESS: Bond details, Collateral value, Loan eligibility, Pledge status
                 ❌ CANNOT ACCESS: Operations, Gate, Finance transactions, Party contacts
                 🎯 FOCUS: Collateral verification, bond validity, lien status
                 """;
-            case "auditor" -> """
+            case "AUDITOR" -> """
                 ✅ CAN ACCESS: All Reports (read-only), Compliance docs, Stock reconciliation
-                ❌ CANNOT ACCESS: Create/Edit anything, Approve actions, Finance transactions
+                ❌ CANNOT ACCESS: Create/Edit anything, Finance transactions
                 🎯 FOCUS: Verification, audit trails, compliance checks
                 """;
-            case "customer" -> """
+            case "CUSTOMER" -> """
                 ✅ CAN ACCESS: Own stock status, Own bonds, Own invoices, Own documents (WHR, DO)
                 ❌ CANNOT ACCESS: Other party data, Operations, System settings
                 🎯 FOCUS: Track own inventory, request dispatch, download documents
                 """;
-            default -> defaultAdminRestrictions();
+            default -> adminRestrictions();
         };
     }
 
-    private String defaultAdminRestrictions() {
+    private String adminRestrictions() {
         return """
+            You are a WMS assistant with FULL access.
+            Help with inward, outward, gate operations, bonds, reports, user management,
+            and system settings. Return JSON with data[] containing actions when navigation
+            is needed. Always be concise and warehouse-context aware.
+
             ✅ CAN ACCESS: ALL MODULES — full system access
             🎯 FOCUS: System configuration, user support, troubleshooting
             """;

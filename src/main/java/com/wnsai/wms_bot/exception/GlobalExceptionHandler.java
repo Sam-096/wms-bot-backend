@@ -1,6 +1,7 @@
 package com.wnsai.wms_bot.exception;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -90,6 +91,22 @@ public class GlobalExceptionHandler {
                 "code",  "AUTH_FAILED",
                 "timestamp", Instant.now().toString()
             )));
+    }
+
+    // ── Duplicate email/username (register conflict) ──────────────────────────
+    @ExceptionHandler(IllegalArgumentException.class)
+    public Mono<ResponseEntity<Map<String, Object>>> handleIllegalArg(IllegalArgumentException ex) {
+        log.warn("Conflict: {}", ex.getMessage());
+        return Mono.just(ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(error(HttpStatus.CONFLICT, ex.getMessage())));
+    }
+
+    // ── DB unique constraint violation ────────────────────────────────────────
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public Mono<ResponseEntity<Map<String, Object>>> handleDataIntegrity(DataIntegrityViolationException ex) {
+        log.warn("DB constraint violation: {}", ex.getMessage());
+        return Mono.just(ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(error(HttpStatus.CONFLICT, "A record with this email or username already exists")));
     }
 
     // ── Access denied ─────────────────────────────────────────────────────────

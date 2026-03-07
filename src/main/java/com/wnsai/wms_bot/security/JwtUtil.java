@@ -101,9 +101,18 @@ public class JwtUtil {
         }
     }
 
-    public String extractUserId(String token)      { return validateAndExtract(token).getSubject(); }
-    public String extractRole(String token)        { return validateAndExtract(token).get(AppConstants.CLAIM_ROLE, String.class); }
-    public String extractEmail(String token)       { return validateAndExtract(token).get(AppConstants.CLAIM_EMAIL, String.class); }
-    public String extractWarehouseId(String token) { return validateAndExtract(token).get(AppConstants.CLAIM_WAREHOUSE_ID, String.class); }
-    public long   getAccessExpiryMs()              { return accessExpiryMs; }
+    public String  extractUserId(String token)      { return validateAndExtract(token).getSubject(); }
+    public String  extractRole(String token)        { return validateAndExtract(token).get(AppConstants.CLAIM_ROLE, String.class); }
+    public String  extractEmail(String token)       { return validateAndExtract(token).get(AppConstants.CLAIM_EMAIL, String.class); }
+    public String  extractWarehouseId(String token) { return validateAndExtract(token).get(AppConstants.CLAIM_WAREHOUSE_ID, String.class); }
+    public long    getAccessExpiryMs()              { return accessExpiryMs; }
+
+    /** Returns true if the token is expired OR invalid (treat invalid as expired). */
+    public boolean isTokenExpired(String token) {
+        try {
+            return validateAndExtract(token).getExpiration().before(new Date());
+        } catch (JwtException | IllegalArgumentException e) {
+            return true;
+        }
+    }
 }

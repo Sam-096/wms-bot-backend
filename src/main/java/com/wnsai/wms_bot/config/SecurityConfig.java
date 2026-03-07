@@ -86,37 +86,39 @@ public class SecurityConfig {
                 .pathMatchers(HttpMethod.POST,  "/api/v1/auth/logout").authenticated()
                 .pathMatchers(HttpMethod.GET,   "/api/v1/auth/me").authenticated()
 
-                // ── 3. ROLE-BASED endpoints ───────────────────────────────
-                .pathMatchers(HttpMethod.POST,
-                    "/api/v1/chat"
-                ).hasAnyRole("MANAGER", "OPERATOR", "GATE_STAFF", "VIEWER")
+                // ── 3. ADMIN-ONLY endpoints ───────────────────────────────
+                .pathMatchers("/api/v1/admin/**")
+                    .hasRole("ADMIN")
 
-                .pathMatchers(HttpMethod.GET,
-                    "/api/v1/dashboard/snapshot"
-                ).hasAnyRole("MANAGER", "OPERATOR", "GATE_STAFF", "VIEWER")
+                // ── 4. ROLE-BASED endpoints ───────────────────────────────
+                .pathMatchers(HttpMethod.POST, "/api/v1/chat")
+                    .hasAnyRole("ADMIN", "MANAGER", "OPERATOR", "GATE_STAFF", "VIEWER")
+
+                .pathMatchers(HttpMethod.GET, "/api/v1/dashboard/snapshot")
+                    .hasAnyRole("ADMIN", "MANAGER", "OPERATOR", "GATE_STAFF", "VIEWER")
 
                 .pathMatchers("/api/v1/gate-pass/**")
-                    .hasAnyRole("MANAGER", "OPERATOR", "GATE_STAFF")
+                    .hasAnyRole("ADMIN", "MANAGER", "OPERATOR", "GATE_STAFF")
 
                 .pathMatchers("/api/v1/inward/**")
-                    .hasAnyRole("MANAGER", "OPERATOR")
+                    .hasAnyRole("ADMIN", "MANAGER", "OPERATOR")
 
                 .pathMatchers("/api/v1/outward/**")
-                    .hasAnyRole("MANAGER", "OPERATOR")
+                    .hasAnyRole("ADMIN", "MANAGER", "OPERATOR")
 
                 .pathMatchers("/api/v1/inventory/**")
-                    .hasAnyRole("MANAGER", "OPERATOR", "VIEWER")
+                    .hasAnyRole("ADMIN", "MANAGER", "OPERATOR", "VIEWER")
 
                 .pathMatchers("/api/v1/bonds/**")
-                    .hasAnyRole("MANAGER", "VIEWER")
+                    .hasAnyRole("ADMIN", "MANAGER", "VIEWER")
 
                 .pathMatchers("/api/v1/reports/**")
-                    .hasAnyRole("MANAGER", "OPERATOR")
+                    .hasAnyRole("ADMIN", "MANAGER", "OPERATOR")
 
                 .pathMatchers("/api/v1/chat/**")
-                    .hasAnyRole("MANAGER", "OPERATOR", "GATE_STAFF", "VIEWER")
+                    .hasAnyRole("ADMIN", "MANAGER", "OPERATOR", "GATE_STAFF", "VIEWER")
 
-                // ── 4. Everything else requires auth ──────────────────────
+                // ── 5. Everything else requires auth ──────────────────────
                 .anyExchange().authenticated()
             )
             .build();
