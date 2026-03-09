@@ -12,11 +12,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Builds a structured context block injected into Ollama prompts.
- * Only called for AI_QUERY intent. Max 500 tokens of context.
+ * Builds a structured context block injected into LLM prompts.
+ * Only called for AI_QUERY / UNKNOWN intent. Max 500 tokens of context.
  *
  * Keyword detection decides which DB tables to query —
  * we never load all data; only what's relevant to the question.
+ *
+ * TABLE NAMES match actual JPA entities (verified against @Table annotations):
+ *   stock_inventory, inward_transactions, outward_transactions, gate_pass, bonds
  */
 @Slf4j
 @Service
@@ -38,24 +41,26 @@ public class ContextBuilderService implements ContextBuilder {
         List<String> sections = new ArrayList<>();
 
         // Only fetch sections relevant to the query keywords
-        if (anyOf(lower, "stock", "inventory", "bags", "quantity", "ఎంత")) {
+        if (anyOf(lower, "stock", "inventory", "bags", "quantity", "available",
+                         "item", "commodit", "ఎంత", "stock", "మాల")) {
             sections.add(fetchInventorySummary(warehouseId));
         }
-        if (anyOf(lower, "inward", "receipt", "arrival", "pending")) {
+        if (anyOf(lower, "inward", "receipt", "arrival", "pending", "received",
+                         "truck", "incoming", "grn", "entry")) {
             sections.add(fetchRecentInward(warehouseId));
         }
-        if (anyOf(lower, "outward", "dispatch", "delivery")) {
+        if (anyOf(lower, "outward", "dispatch", "delivery", "sent", "outgoing")) {
             sections.add(fetchRecentOutward(warehouseId));
         }
-        if (anyOf(lower, "bond", "pledge", "lien", "collateral")) {
+        if (anyOf(lower, "bond", "pledge", "lien", "collateral", "customs", "bonded")) {
             sections.add(fetchBondSummary(warehouseId));
         }
-        if (anyOf(lower, "gate", "vehicle", "driver", "weighbridge")) {
+        if (anyOf(lower, "gate", "vehicle", "driver", "pass", "inside", "entry", "exit")) {
             sections.add(fetchGateStatus(warehouseId));
         }
 
         if (sections.isEmpty()) {
-            return ""; // No specific context — let Ollama answer from training
+            return ""; // No specific context — let LLM answer from training
         }
 
         String context = String.join("\n\n", sections);
@@ -68,23 +73,38 @@ public class ContextBuilderService implements ContextBuilder {
         return "═══ LIVE WAREHOUSE CONTEXT ═══\n" + context + "\n═══════════════════════════════";
     }
 
-    // ─── DB Fetchers ──────────────────────────────────────────────────────────
+    // ─── DB Fetchers — table names verified against JPA @Table annotations ────
 
+    /**
+     * Table: stock_inventory
+     * Columns: item_name, current_stock, unit, min_threshold, warehouse_id
+     */
     private String fetchInventorySummary(String warehouseId) {
-        if (jdbc == null) return "INVENTORY: DB not connected (no live data available)";
+        if (jdbc == null) return "INVENTORY: DB not connected";
         try {
             List<Map<String, Object>> rows = jdbc.queryForList("""
-                SELECT commodity_name, SUM(current_qty) AS total_qty, unit
-                FROM inventory_items
+                SELECT item_name, current_stock, unit, min_threshold
+                FROM stock_inventory
                 WHERE warehouse_id = ?
-                GROUP BY commodity_name, unit
-                ORDER BY total_qty DESC
-                LIMIT 10
+                  AND current_stock > 0
+                ORDER BY current_stock DESC
+                LIMIT 15
                 """, warehouseId);
+            if (rows.isEmpty()) return "INVENTORY: No stock items found for this warehouse.";
             StringBuilder sb = new StringBuilder("INVENTORY SUMMARY:\n");
             for (Map<String, Object> r : rows) {
-                sb.append(String.format("  %s: %s %s\n",
-                    r.get("commodity_name"), r.get("total_qty"), r.get("unit")));
+                String low = "";
+                Object threshold = r.get("min_threshold");
+                Object stock = r.get("current_stock");
+                if (threshold != null && stock != null) {
+                    try {
+                        double t = Double.parseDouble(threshold.toString());
+                        double s = Double.parseDouble(stock.toString());
+                        if (s < t) low = " ⚠️ LOW STOCK";
+                    } catch (NumberFormatException ignored) {}
+                }
+                sb.append(String.format("  %s: %s %s%s\n",
+                    r.get("item_name"), stock, r.get("unit"), low));
             }
             return sb.toString();
         } catch (Exception e) {
@@ -93,21 +113,32 @@ public class ContextBuilderService implements ContextBuilder {
         }
     }
 
+    /**
+     * Table: inward_transactions
+     * Columns: grn_number, supplier_name, item_name, quantity, quantity_bags,
+     *          unit, status, inward_date, vehicle_number, created_at
+     */
     private String fetchRecentInward(String warehouseId) {
-        if (jdbc == null) return "INWARD: DB not connected (no live data available)";
+        if (jdbc == null) return "INWARD: DB not connected";
         try {
             List<Map<String, Object>> rows = jdbc.queryForList("""
-                SELECT receipt_no, party_name, commodity, bags, status, created_at
-                FROM inward_receipts
+                SELECT grn_number, supplier_name, item_name,
+                       quantity, quantity_bags, unit, status,
+                       inward_date, vehicle_number
+                FROM inward_transactions
                 WHERE warehouse_id = ?
                 ORDER BY created_at DESC
                 LIMIT 5
                 """, warehouseId);
-            StringBuilder sb = new StringBuilder("RECENT INWARD RECEIPTS:\n");
+            if (rows.isEmpty()) return "INWARD: No recent inward transactions.";
+            StringBuilder sb = new StringBuilder("RECENT INWARD TRANSACTIONS:\n");
             for (Map<String, Object> r : rows) {
-                sb.append(String.format("  #%s | %s | %s | %s bags | %s\n",
-                    r.get("receipt_no"), r.get("party_name"),
-                    r.get("commodity"), r.get("bags"), r.get("status")));
+                sb.append(String.format("  GRN#%s | %s | %s | %s %s",
+                    r.get("grn_number"), r.get("supplier_name"),
+                    r.get("item_name"), r.get("quantity"), r.get("unit")));
+                if (r.get("quantity_bags") != null)
+                    sb.append(String.format(" (%s bags)", r.get("quantity_bags")));
+                sb.append(String.format(" | %s | %s\n", r.get("status"), r.get("inward_date")));
             }
             return sb.toString();
         } catch (Exception e) {
@@ -116,21 +147,32 @@ public class ContextBuilderService implements ContextBuilder {
         }
     }
 
+    /**
+     * Table: outward_transactions
+     * Columns: dispatch_number, customer_name, item_name, quantity, quantity_bags,
+     *          unit, status, outward_date, vehicle_number, created_at
+     */
     private String fetchRecentOutward(String warehouseId) {
-        if (jdbc == null) return "OUTWARD: DB not connected (no live data available)";
+        if (jdbc == null) return "OUTWARD: DB not connected";
         try {
             List<Map<String, Object>> rows = jdbc.queryForList("""
-                SELECT dispatch_no, party_name, commodity, bags, status, created_at
-                FROM outward_dispatches
+                SELECT dispatch_number, customer_name, item_name,
+                       quantity, quantity_bags, unit, status,
+                       outward_date, vehicle_number
+                FROM outward_transactions
                 WHERE warehouse_id = ?
                 ORDER BY created_at DESC
                 LIMIT 5
                 """, warehouseId);
-            StringBuilder sb = new StringBuilder("RECENT OUTWARD DISPATCHES:\n");
+            if (rows.isEmpty()) return "OUTWARD: No recent outward transactions.";
+            StringBuilder sb = new StringBuilder("RECENT OUTWARD TRANSACTIONS:\n");
             for (Map<String, Object> r : rows) {
-                sb.append(String.format("  #%s | %s | %s | %s bags | %s\n",
-                    r.get("dispatch_no"), r.get("party_name"),
-                    r.get("commodity"), r.get("bags"), r.get("status")));
+                sb.append(String.format("  Dispatch#%s | %s | %s | %s %s",
+                    r.get("dispatch_number"), r.get("customer_name"),
+                    r.get("item_name"), r.get("quantity"), r.get("unit")));
+                if (r.get("quantity_bags") != null)
+                    sb.append(String.format(" (%s bags)", r.get("quantity_bags")));
+                sb.append(String.format(" | %s | %s\n", r.get("status"), r.get("outward_date")));
             }
             return sb.toString();
         } catch (Exception e) {
@@ -139,23 +181,26 @@ public class ContextBuilderService implements ContextBuilder {
         }
     }
 
+    /**
+     * Table: bonds
+     * Columns: bond_number, item_name, quantity, expiry_date, status
+     */
     private String fetchBondSummary(String warehouseId) {
-        if (jdbc == null) return "BONDS: DB not connected (no live data available)";
+        if (jdbc == null) return "BONDS: DB not connected";
         try {
             List<Map<String, Object>> rows = jdbc.queryForList("""
-                SELECT bond_no, party_name, commodity, collateral_value,
-                       expiry_date, status
+                SELECT bond_number, item_name, quantity, expiry_date, status
                 FROM bonds
                 WHERE warehouse_id = ? AND status = 'ACTIVE'
                 ORDER BY expiry_date ASC
                 LIMIT 5
                 """, warehouseId);
+            if (rows.isEmpty()) return "BONDS: No active bonds found.";
             StringBuilder sb = new StringBuilder("ACTIVE BONDS:\n");
             for (Map<String, Object> r : rows) {
-                sb.append(String.format("  #%s | %s | %s | ₹%s | Expires: %s\n",
-                    r.get("bond_no"), r.get("party_name"),
-                    r.get("commodity"), r.get("collateral_value"),
-                    r.get("expiry_date")));
+                sb.append(String.format("  Bond#%s | %s | %s | Expires: %s\n",
+                    r.get("bond_number"), r.get("item_name"),
+                    r.get("quantity"), r.get("expiry_date")));
             }
             return sb.toString();
         } catch (Exception e) {
@@ -164,21 +209,46 @@ public class ContextBuilderService implements ContextBuilder {
         }
     }
 
+    /**
+     * Table: gate_pass
+     * Columns: vehicle_number, driver_name, purpose, commodity_name,
+     *          status (OPEN|CLOSED|CANCELLED), entry_time, exit_time
+     */
     private String fetchGateStatus(String warehouseId) {
-        if (jdbc == null) return "GATE: DB not connected (no live data available)";
+        if (jdbc == null) return "GATE: DB not connected";
         try {
-            Integer active = jdbc.queryForObject("""
-                SELECT COUNT(*) FROM gate_passes
-                WHERE warehouse_id = ? AND status = 'ACTIVE'
+            Integer open = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM gate_pass
+                WHERE warehouse_id = ? AND status = 'OPEN'
                 """, Integer.class, warehouseId);
-            return String.format("GATE STATUS: %d vehicles currently inside", active);
+
+            List<Map<String, Object>> recent = jdbc.queryForList("""
+                SELECT vehicle_number, driver_name, purpose,
+                       commodity_name, status, entry_time
+                FROM gate_pass
+                WHERE warehouse_id = ?
+                ORDER BY entry_time DESC
+                LIMIT 5
+                """, warehouseId);
+
+            StringBuilder sb = new StringBuilder(
+                String.format("GATE STATUS: %d vehicles currently inside (OPEN passes)\n", open));
+            if (!recent.isEmpty()) {
+                sb.append("RECENT GATE PASSES:\n");
+                for (Map<String, Object> r : recent) {
+                    sb.append(String.format("  %s | %s | %s | %s | %s\n",
+                        r.get("vehicle_number"), r.get("driver_name"),
+                        r.get("purpose"), r.get("commodity_name"), r.get("status")));
+                }
+            }
+            return sb.toString();
         } catch (Exception e) {
             log.warn("fetchGateStatus failed: {}", e.getMessage());
             return "GATE: data temporarily unavailable";
         }
     }
 
-    // ─── Helpers ─────────────────────────────────────────────────────────────
+    // ─── Helper ──────────────────────────────────────────────────────────────
 
     private boolean anyOf(String text, String... keywords) {
         for (String kw : keywords) {

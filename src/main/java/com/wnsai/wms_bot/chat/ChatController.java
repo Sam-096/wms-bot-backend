@@ -203,6 +203,51 @@ public class ChatController {
                    .then();
     }
 
+    /**
+     * PATCH /api/v1/chat/sessions/{sessionId}
+     * Upserts a chat session — creates if not found, updates if exists.
+     * Called by the frontend after receiving an AI response to persist session state.
+     *
+     * Body (all fields optional):
+     *   { "warehouseId": "WH-001", "title": "My Chat", "language": "en" }
+     */
+    @PatchMapping("/chat/sessions/{sessionId}")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','OPERATOR','VIEWER','GATE_STAFF')")
+    public Mono<ChatSession> upsertSession(
+            @PathVariable String sessionId,
+            @RequestBody(required = false) Map<String, String> body,
+            Authentication authentication) {
+
+        Map<String, String> payload = (body != null) ? body : Map.of();
+        String jwtUserId = extractUserId(authentication);
+
+        return Mono.fromCallable(() -> {
+            var existing = chatSessionRepo.findBySessionId(sessionId);
+            if (existing.isPresent()) {
+                ChatSession s = existing.get();
+                if (payload.containsKey("title"))    s.setTitle(payload.get("title"));
+                if (payload.containsKey("language")) s.setLanguage(payload.get("language"));
+                return chatSessionRepo.save(s);
+            }
+            UUID userUuid = null;
+            try { if (jwtUserId != null) userUuid = UUID.fromString(jwtUserId); }
+            catch (IllegalArgumentException ignored) {}
+
+            ChatSession s = ChatSession.builder()
+                .sessionId(sessionId)
+                .warehouseId(payload.getOrDefault("warehouseId", "UNKNOWN"))
+                .language(payload.getOrDefault("language", "en"))
+                .title(payload.getOrDefault("title", "New Chat"))
+                .userId(userUuid)
+                .messageCount(0)
+                .isDeleted(false)
+                .build();
+            log.info("Creating new ChatSession sessionId={} warehouseId={}",
+                sessionId, s.getWarehouseId());
+            return chatSessionRepo.save(s);
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
     @GetMapping("/chat/sessions/{sessionId}/messages")
     @PreAuthorize("hasAnyRole('ADMIN','MANAGER','OPERATOR','VIEWER','GATE_STAFF')")
     public Mono<List<ChatMessage>> getMessages(@PathVariable String sessionId) {

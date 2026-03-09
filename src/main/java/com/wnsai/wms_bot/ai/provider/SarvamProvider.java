@@ -8,7 +8,6 @@ import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOper
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -19,17 +18,16 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Tier 2 — Groq Cloud API (OpenAI-compatible).
- * Uses llama3-8b-8192 with 8s timeout + Resilience4j circuit breaker.
+ * Tier 3 — Sarvam AI (Indian language LLM, OpenAI-compatible chat endpoint).
+ * Used as fallback when Groq is unavailable or circuit is open.
+ * Especially suited for Telugu / Hindi responses.
  *
- * Circuit breaker "groq" opens after 60% failure rate in 5 calls,
- * waits 30s in OPEN state, then allows 2 test calls in HALF-OPEN.
- *
- * If GROQ_API_KEY is blank, immediately errors so the chain falls through to Tier 3.
+ * Circuit breaker "sarvam" mirrors Groq config (60% fail in 5 calls → 30s open).
+ * If SARVAM_API_KEY is blank, immediately errors so chain falls through to Tier 4.
  */
 @Slf4j
 @Component
-public class GroqProvider implements LLMProvider {
+public class SarvamProvider implements LLMProvider {
 
     private final WebClient      client;
     private final String         model;
@@ -37,64 +35,66 @@ public class GroqProvider implements LLMProvider {
     private final Duration       timeout;
     private final CircuitBreaker circuitBreaker;
 
-    public GroqProvider(
-            @Value("${groq.api-key:}")                               String apiKey,
-            @Value("${groq.base-url:https://api.groq.com/openai/v1}") String baseUrl,
-            @Value("${groq.model:llama3-8b-8192}")                   String model,
-            @Value("${groq.timeout:8000}")                           int timeoutMs,
+    public SarvamProvider(
+            @Value("${sarvam.api.key:}")                               String apiKey,
+            @Value("${sarvam.api.base-url:https://api.sarvam.ai}")     String baseUrl,
+            @Value("${sarvam.model:sarvam-m}")                         String model,
+            @Value("${sarvam.timeout:5000}")                           int timeoutMs,
             CircuitBreakerRegistry circuitBreakerRegistry) {
         this.apiKey         = apiKey;
         this.model          = model;
         this.timeout        = Duration.ofMillis(timeoutMs);
-        this.circuitBreaker = circuitBreakerRegistry.circuitBreaker("groq");
+        this.circuitBreaker = circuitBreakerRegistry.circuitBreaker("sarvam");
         this.client         = WebClient.builder()
                 .baseUrl(baseUrl)
-                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .defaultHeader("api-subscription-key", apiKey)
+                .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
                 .codecs(c -> c.defaultCodecs().maxInMemorySize(4 * 1024 * 1024))
                 .build();
 
         if (apiKey == null || apiKey.isBlank()) {
-            log.warn("GroqProvider: GROQ_API_KEY not set — Tier 2 disabled. " +
-                     "Set GROQ_API_KEY env var on Render to enable cloud AI.");
+            log.warn("SarvamProvider: SARVAM_API_KEY not set — Tier 3 disabled. " +
+                     "Set SARVAM_API_KEY env var on Render to enable.");
         } else {
-            log.info("GroqProvider init — baseUrl={}, model={}", baseUrl, model);
+            log.info("SarvamProvider init — baseUrl={}, model={}", baseUrl, model);
         }
     }
 
     @PostConstruct
     void logStartupStatus() {
-        log.info("GroqProvider startup: keyPresent={}, model={}, timeout={}ms, circuitBreaker={}",
+        log.info("SarvamProvider startup: keyPresent={}, model={}, timeout={}ms, circuitBreaker={}",
                 !(apiKey == null || apiKey.isBlank()), model,
                 timeout.toMillis(), circuitBreaker.getState());
     }
 
     @Override
-    public String getName() { return "GROQ"; }
+    public String getName() { return "SARVAM"; }
 
     @Override
     public Flux<String> stream(String systemPrompt, String userMessage, String language) {
         if (apiKey == null || apiKey.isBlank()) {
             return Flux.error(new IllegalStateException(
-                    "GROQ_API_KEY not configured — skipping Tier 2"));
+                    "SARVAM_API_KEY not configured — skipping Tier 3"));
         }
 
         return doStream(systemPrompt, userMessage)
                 .transform(CircuitBreakerOperator.of(circuitBreaker))
-                .doOnError(e -> log.error("GroqProvider FAILED — type={} message={} circuitState={}",
+                .doOnError(e -> log.error("SarvamProvider FAILED — type={} message={} circuitState={}",
                         e.getClass().getSimpleName(), e.getMessage(), circuitBreaker.getState()))
                 .onErrorMap(io.github.resilience4j.circuitbreaker.CallNotPermittedException.class,
-                        e -> new WmsExceptions.AiProviderException("GROQ_CIRCUIT_OPEN",
-                                "Groq circuit breaker open — too many recent failures"));
+                        e -> new WmsExceptions.AiProviderException("SARVAM_CIRCUIT_OPEN",
+                                "Sarvam circuit breaker open — too many recent failures"));
     }
 
     private Flux<String> doStream(String systemPrompt, String userMessage) {
         return client.post()
-                .uri("/chat/completions")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
+                .uri("/v1/chat/completions")
                 .bodyValue(Map.of(
-                        "model",    model,
-                        "stream",   true,
-                        "messages", List.of(
+                        "model",       model,
+                        "temperature", 0.3,
+                        "max_tokens",  500,
+                        "stream",      true,
+                        "messages",    List.of(
                                 Map.of("role", "system", "content", systemPrompt),
                                 Map.of("role", "user",   "content", userMessage)
                         )
@@ -102,25 +102,21 @@ public class GroqProvider implements LLMProvider {
                 .retrieve()
                 .bodyToFlux(String.class)
                 .timeout(timeout)
-                .filter(line -> line.startsWith("data:") && !line.contains("[DONE]"))
-                .map(line -> line.substring(5).trim())
+                .filter(line -> line.contains("\"content\"") && !line.contains("[DONE]"))
                 .map(this::extractToken)
                 .filter(t -> !t.isBlank());
     }
 
-    private String extractToken(String json) {
+    private String extractToken(String line) {
         try {
-            int idx = json.indexOf("\"content\":\"");
-            if (idx == -1) return "";
-            int start = idx + 11;
-            int end   = json.indexOf("\"", start);
-            if (end > start) {
-                return json.substring(start, end)
-                           .replace("\\n", "\n")
-                           .replace("\\t", "\t")
-                           .replace("\\\"", "\"");
-            }
-            return "";
+            String json  = line.startsWith("data:") ? line.substring(5).trim() : line;
+            int    start = json.indexOf("\"content\":\"") + 11;
+            if (start < 11) return "";
+            int end = json.indexOf("\"", start);
+            return (end > start) ? json.substring(start, end)
+                    .replace("\\n", "\n")
+                    .replace("\\t", "\t")
+                    .replace("\\\"", "\"") : "";
         } catch (Exception e) {
             return "";
         }

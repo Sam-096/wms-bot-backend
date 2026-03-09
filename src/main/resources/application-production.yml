@@ -20,6 +20,17 @@ spring:
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
+  # ── Redis Cloud (ap-south-1, 30MB free) — set REDIS_URL on Render ──────
+  data:
+    redis:
+      url: ${REDIS_URL:}          # redis://:password@host:port — leave blank to disable
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 10
+          max-idle: 5
+          min-idle: 1
+          time-between-eviction-runs: 60s
 
 server:
   port: ${PORT:8080}
@@ -60,6 +71,29 @@ sarvam:
 # ── CORS ──────────────────────────────────────────────────────────────────
 cors:
   allowed-origins: "${FRONTEND_URL:https://wmsai.netlify.app}"
+
+# ── Resilience4j — circuit breaker for Groq + Sarvam AI ──────────────────
+resilience4j:
+  circuitbreaker:
+    instances:
+      groq:
+        sliding-window-size: 5
+        failure-rate-threshold: 60
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 2
+        register-health-indicator: true
+      sarvam:
+        sliding-window-size: 5
+        failure-rate-threshold: 60
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 2
+        register-health-indicator: true
+  timelimiter:
+    instances:
+      groq:
+        timeout-duration: 10s
+      sarvam:
+        timeout-duration: 15s
 
 # ── Actuator (limited exposure in production) ─────────────────────────────
 management:
