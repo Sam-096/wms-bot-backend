@@ -1,7 +1,10 @@
 package com.wnsai.wms_bot.chat.orchestration;
 
 import com.wnsai.wms_bot.ai.adapter.OllamaLLMAdapter;
+import com.wnsai.wms_bot.ai.model.LiveWarehouseContext;
+import com.wnsai.wms_bot.ai.service.PromptContextService;
 import com.wnsai.wms_bot.ai.service.WMSPromptBuilder;
+import com.wnsai.wms_bot.ai.util.ResponseCleanerUtil;
 import com.wnsai.wms_bot.chat.ChatRequest;
 import com.wnsai.wms_bot.chat.ChatResponse;
 import com.wnsai.wms_bot.context.ContextBuilder;
@@ -22,54 +25,56 @@ import java.util.Optional;
 /**
  * Central orchestration pipeline.
  *
- * Depends ONLY on interfaces — never on concrete implementations.
- * SOLID: single responsibility (routing), open for extension (new intents).
+ * Changes from base version:
+ *   1. PromptContextService fetches live warehouse stats before every LLM call.
+ *   2. ResponseCleanerUtil strips <think>...</think> blocks from the token stream.
+ *   3. WMSPromptBuilder receives LiveWarehouseContext for real-data injection.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ChatOrchestratorImpl implements ChatOrchestrator {
 
-    private final IntentClassifier     intentClassifier;
-    private final QuickResponder       quickResponder;
-    private final NavigationResolver   navigationResolver;
-    private final ContextBuilder       contextBuilder;
-    private final EmbeddingService     embeddingService;
-    private final OllamaLLMAdapter     ollamaAdapter;
-    private final WMSPromptBuilder     promptBuilder;
+    private final IntentClassifier    intentClassifier;
+    private final QuickResponder      quickResponder;
+    private final NavigationResolver  navigationResolver;
+    private final ContextBuilder      contextBuilder;
+    private final EmbeddingService    embeddingService;
+    private final OllamaLLMAdapter    ollamaAdapter;
+    private final WMSPromptBuilder    promptBuilder;
+    private final PromptContextService promptContextService;  // live DB stats
+    private final ResponseCleanerUtil  responseCleaner;       // strips <think> tags
 
     @Override
     public Flux<ChatResponse> handle(ChatRequest req) {
         long start = System.currentTimeMillis();
 
-        // ── Step 1: Classify — never touches LLM ──────────────────────────────
         IntentResult intent = intentClassifier.classify(req.message());
         log.info("SessionId={} intent={} confidence={} warehouseId={}",
             req.sessionId(), intent.type(), intent.confidence(), req.warehouseId());
 
         return switch (intent.type()) {
 
-            // ── Greeting: pure cache lookup, < 50ms ───────────────────────────
+            // Greeting: pure cache lookup, < 50ms
             case GREETING -> {
                 String text = quickResponder.greet(req.language());
                 log.info("GREETING response in {}ms", System.currentTimeMillis() - start);
                 yield Flux.just(ChatResponse.instant(text));
             }
 
-            // ── Navigation: route resolution, < 100ms ─────────────────────────
+            // Navigation: route resolution, < 100ms
             case NAVIGATION -> {
                 Optional<NavigationCommand> cmd = navigationResolver.resolve(req.message());
                 if (cmd.isPresent()) {
-                    log.info("NAVIGATION → {} in {}ms",
+                    log.info("NAVIGATION -> {} in {}ms",
                         cmd.get().route(), System.currentTimeMillis() - start);
                     yield Flux.just(ChatResponse.navigation(
                         cmd.get().route(), cmd.get().label()));
                 }
-                // Fallback: classify as AI_QUERY if route resolution fails
-                yield streamOllama(req, "", start);
+                yield streamWithLiveContext(req, "", start);
             }
 
-            // ── Quick Query: single DB fetch, < 300ms ─────────────────────────
+            // Quick Query: single DB fetch, < 300ms
             case QUICK_QUERY -> {
                 String entity = intent.extractedEntity();
                 yield quickResponder.handleQuickQuery(entity, req.warehouseId())
@@ -79,12 +84,12 @@ public class ChatOrchestratorImpl implements ChatOrchestrator {
                         System.currentTimeMillis() - start));
             }
 
-            // ── AI Query: build context + RAG + stream Ollama ─────────────────
+            // AI Query: build RAG context + live stats + stream LLM
             case AI_QUERY, UNKNOWN -> streamWithContext(req, start);
         };
     }
 
-    // ─── Streaming with context + RAG ─────────────────────────────────────────
+    // Streaming with RAG context + live warehouse data
 
     private Flux<ChatResponse> streamWithContext(ChatRequest req, long start) {
         Mono<String> dbContext  = contextBuilder.buildContext(
@@ -94,36 +99,46 @@ public class ChatOrchestratorImpl implements ChatOrchestrator {
         return Mono.zip(dbContext, ragContext)
             .flatMapMany(tuple -> {
                 String fullContext = tuple.getT1() + "\n" + tuple.getT2();
-                log.info("AI_QUERY context built in {}ms, streaming…",
+                log.info("AI_QUERY context built in {}ms, streaming...",
                     System.currentTimeMillis() - start);
-                return streamOllama(req, fullContext, start);
+                return streamWithLiveContext(req, fullContext, start);
             })
             .onErrorResume(e -> {
                 log.error("Context build failed, streaming without context: {}", e.getMessage());
-                return streamOllama(req, "", start);
+                return streamWithLiveContext(req, "", start);
             });
     }
 
-    // ─── Ollama SSE streaming ─────────────────────────────────────────────────
+    // Fetch live stats -> build prompt -> stream LLM -> clean <think> tags
 
-    private Flux<ChatResponse> streamOllama(ChatRequest req, String context, long start) {
-        String systemPrompt = promptBuilder.build(
+    private Flux<ChatResponse> streamWithLiveContext(ChatRequest req, String ragContext, long start) {
+        return promptContextService.fetchContext(req.warehouseId())
+            .flatMapMany(live -> streamLLM(req, ragContext, live, start));
+    }
+
+    private Flux<ChatResponse> streamLLM(ChatRequest req, String ragContext,
+                                          LiveWarehouseContext live, long start) {
+        String warehouseName = req.warehouseName() != null ? req.warehouseName() : req.warehouseId();
+        String systemPrompt  = promptBuilder.build(
             req.language(),
             req.role(),
-            req.warehouseId(),
-            null,          // currentScreen not in new ChatRequest
-            context
+            warehouseName,
+            null,
+            ragContext,
+            live
         );
 
         return ollamaAdapter.streamChat(systemPrompt, req.message())
+            .transform(responseCleaner::cleanStream)  // strip <think>...</think>
+            .filter(token -> !token.isBlank())
             .map(ChatResponse::token)
             .concatWith(Flux.just(ChatResponse.done()))
-            .doOnSubscribe(s -> log.info("Ollama stream started in {}ms",
+            .doOnSubscribe(s -> log.info("LLM stream started (context+live) in {}ms",
                 System.currentTimeMillis() - start))
-            .doOnComplete(() -> log.info("Ollama stream complete in {}ms",
+            .doOnComplete(() -> log.info("LLM stream complete in {}ms",
                 System.currentTimeMillis() - start))
             .onErrorResume(e -> {
-                log.error("Ollama offline: {}", e.getMessage());
+                log.error("LLM stream error: {}", e.getMessage());
                 return Flux.just(
                     ChatResponse.error("AI_OFFLINE"),
                     ChatResponse.done()
