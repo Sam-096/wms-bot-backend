@@ -27,10 +27,16 @@ public class OllamaLLMAdapter implements ILLMEngine {
         return chain.stream(systemPrompt, userMessage, language);
     }
 
+    /**
+     * Blocking convenience method — only safe to call from non-reactor threads
+     * (e.g. scheduled jobs, CLI tools). NEVER call from inside a flatMap/map.
+     * All chat pipeline code must use streamChat() instead.
+     */
     @Override
     public String chat(String systemPrompt, String userMessage) {
         return streamChat(systemPrompt, userMessage)
                 .reduce("", String::concat)
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
                 .block();
     }
 

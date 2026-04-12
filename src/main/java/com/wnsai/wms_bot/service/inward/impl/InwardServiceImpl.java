@@ -15,6 +15,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -29,6 +30,7 @@ public class InwardServiceImpl implements InwardService {
 
     private final InwardTransactionRepository inwardRepo;
     private final StockInventoryRepository    stockRepo;
+    private final TransactionTemplate         txTemplate;
 
     @Override
     public Mono<Page<InwardResponse>> list(String warehouseId, String status,
@@ -89,7 +91,10 @@ public class InwardServiceImpl implements InwardService {
 
     @Override
     public Mono<InwardResponse> approve(UUID id, String approvedByUserId) {
-        return Mono.fromCallable(() -> {
+        // TransactionTemplate runs on the boundedElastic thread where the DB work actually happens.
+        // @Transactional would open on the calling thread (before subscribeOn) and never reach the
+        // actual DB calls — it would be a no-op due to ThreadLocal not crossing thread boundaries.
+        return Mono.fromCallable(() -> txTemplate.execute(status -> {
             log.debug("approve inward id={} by={}", id, approvedByUserId);
             InwardTransaction tx = inwardRepo.findById(id)
                     .orElseThrow(() -> new EntityNotFoundException("InwardTransaction", id));
@@ -97,7 +102,7 @@ public class InwardServiceImpl implements InwardService {
             UUID approvedBy = UUID.fromString(approvedByUserId);
             inwardRepo.updateApproval(id, "APPROVED", approvedBy);
 
-            // Update stock inventory
+            // Update stock — failure is logged but approval still commits (intentional for inward)
             updateStock(tx.getWarehouseId(), tx.getItemName(),
                     tx.getQuantityBags() != null ? BigDecimal.valueOf(tx.getQuantityBags()) : tx.getQuantity(),
                     tx.getUnit(),
@@ -106,7 +111,7 @@ public class InwardServiceImpl implements InwardService {
             tx.setStatus("APPROVED");
             tx.setApprovedBy(approvedBy);
             return InwardMapper.toResponse(tx);
-        }).subscribeOn(Schedulers.boundedElastic());
+        })).subscribeOn(Schedulers.boundedElastic());
     }
 
     @Override

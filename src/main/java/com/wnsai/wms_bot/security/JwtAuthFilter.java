@@ -4,6 +4,7 @@ import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
@@ -44,7 +45,9 @@ public class JwtAuthFilter implements WebFilter {
             String role     = claims.get("role", String.class);
 
             if (userId == null || role == null) {
-                return chain.filter(exchange);
+                log.warn("JWT missing required claims (sub={} role={}) — rejecting", userId, role);
+                exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+                return exchange.getResponse().setComplete();
             }
 
             var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
@@ -55,7 +58,8 @@ public class JwtAuthFilter implements WebFilter {
 
         } catch (Exception e) {
             log.debug("JWT validation failed: {}", e.getMessage());
-            return chain.filter(exchange);
+            exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+            return exchange.getResponse().setComplete();
         }
     }
 }

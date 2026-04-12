@@ -13,6 +13,9 @@ public interface QuickResponder {
     /** Count + list of pending inward receipts. Target: < 300ms */
     Mono<String> quickPending(String warehouseId);
 
+    /** Today's approved outward dispatches. Target: < 300ms */
+    Mono<String> quickOutward(String warehouseId);
+
     /** Active gate passes. Target: < 300ms */
     Mono<String> quickGatePasses(String warehouseId);
 

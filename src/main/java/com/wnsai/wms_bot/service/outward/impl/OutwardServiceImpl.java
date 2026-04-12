@@ -16,6 +16,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -30,6 +31,7 @@ public class OutwardServiceImpl implements OutwardService {
 
     private final OutwardTransactionRepository outwardRepo;
     private final StockInventoryRepository     stockRepo;
+    private final TransactionTemplate          txTemplate;
 
     @Override
     public Mono<Page<OutwardResponse>> list(String warehouseId, String status,
@@ -68,26 +70,25 @@ public class OutwardServiceImpl implements OutwardService {
 
     @Override
     public Mono<OutwardResponse> approve(UUID id, String approvedByUserId) {
-        return Mono.fromCallable(() -> {
+        // TransactionTemplate runs the transaction on the same boundedElastic thread as the DB work.
+        // Any exception from checkStock or deductStock rolls back updateApproval atomically.
+        return Mono.fromCallable(() -> txTemplate.execute(status -> {
             OutwardTransaction tx = outwardRepo.findById(id)
                     .orElseThrow(() -> new EntityNotFoundException("OutwardTransaction", id));
 
             BigDecimal qty = tx.getQuantityBags() != null
                     ? BigDecimal.valueOf(tx.getQuantityBags()) : tx.getQuantity();
 
-            // Validate stock before deduction
             checkStock(tx.getWarehouseId(), tx.getItemName(), qty);
 
             UUID approvedBy = UUID.fromString(approvedByUserId);
             outwardRepo.updateApproval(id, "APPROVED", approvedBy);
-
-            // Deduct stock
             deductStock(tx.getWarehouseId(), tx.getItemName(), qty);
 
             tx.setStatus("APPROVED");
             tx.setApprovedBy(approvedBy);
             return OutwardMapper.toResponse(tx);
-        }).subscribeOn(Schedulers.boundedElastic());
+        })).subscribeOn(Schedulers.boundedElastic());
     }
 
     @Override
@@ -124,16 +125,12 @@ public class OutwardServiceImpl implements OutwardService {
     }
 
     private void deductStock(String warehouseId, String itemName, BigDecimal qty) {
-        try {
-            stockRepo.findByWarehouseIdAndItemNameIgnoreCase(warehouseId, itemName)
-                    .ifPresent(s -> {
-                        BigDecimal current = s.getCurrentStock() != null
-                                ? s.getCurrentStock() : BigDecimal.ZERO;
-                        s.setCurrentStock(current.subtract(qty).max(BigDecimal.ZERO));
-                        stockRepo.save(s);
-                    });
-        } catch (Exception e) {
-            log.error("Stock deduction failed for {}: {}", itemName, e.getMessage());
-        }
+        stockRepo.findByWarehouseIdAndItemNameIgnoreCase(warehouseId, itemName)
+                .ifPresent(s -> {
+                    BigDecimal current = s.getCurrentStock() != null
+                            ? s.getCurrentStock() : BigDecimal.ZERO;
+                    s.setCurrentStock(current.subtract(qty).max(BigDecimal.ZERO));
+                    stockRepo.save(s);
+                });
     }
 }

@@ -1,5 +1,7 @@
 package com.wnsai.wms_bot.filter;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.Refill;
@@ -13,42 +15,51 @@ import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Rate limiting WebFilter — 60 requests per minute per IP.
- * Auth endpoints and health checks bypass the limit.
+ * Login endpoint gets a tighter limit of 5 req/min for brute-force protection.
+ *
+ * Buckets are stored in a Caffeine cache with 2-minute expiry after last access —
+ * prevents unbounded memory growth from accumulating unique IPs over time.
+ *
+ * X-Forwarded-For is only trusted when the real remote address is a private/loopback
+ * address (i.e. request came through a reverse proxy on the same host/network).
+ * Direct connections from public IPs use the TCP remote address, which cannot be spoofed.
  */
 @Slf4j
 @Component
 @Order(1)
 public class RateLimitFilter implements WebFilter {
 
-    // General: 60 req/min per IP
-    private final ConcurrentHashMap<String, Bucket> buckets      = new ConcurrentHashMap<>();
-    // Login: 5 req/min per IP — brute-force protection
-    private final ConcurrentHashMap<String, Bucket> loginBuckets = new ConcurrentHashMap<>();
+    private static final int      CAPACITY       = 60;
+    private static final int      REFILL_RATE    = 60;
+    private static final int      LOGIN_CAPACITY = 5;
+    private static final String   LOGIN_PATH     = "/api/v1/auth/login";
 
-    private static final int CAPACITY       = 60;
-    private static final int REFILL_RATE    = 60;
-    private static final int LOGIN_CAPACITY = 5;   // max 5 login attempts per minute per IP
+    // Caffeine caches — buckets expire 2 min after last access, bounding memory usage
+    private final Cache<String, Bucket> buckets = Caffeine.newBuilder()
+            .expireAfterAccess(Duration.ofMinutes(2))
+            .maximumSize(50_000)
+            .build();
 
-    private static final String LOGIN_PATH = "/api/v1/auth/login";
+    private final Cache<String, Bucket> loginBuckets = Caffeine.newBuilder()
+            .expireAfterAccess(Duration.ofMinutes(2))
+            .maximumSize(50_000)
+            .build();
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
         String path = exchange.getRequest().getPath().value();
 
-        // Bypass rate limiting for health check
         if (path.startsWith("/actuator")) {
             return chain.filter(exchange);
         }
 
         String ip = resolveClientIp(exchange);
 
-        // Strict login rate limit checked first
         if (LOGIN_PATH.equals(path)) {
-            Bucket loginBucket = loginBuckets.computeIfAbsent(ip, this::newLoginBucket);
+            Bucket loginBucket = loginBuckets.get(ip, k -> newLoginBucket());
             if (!loginBucket.tryConsume(1)) {
                 log.warn("Login rate limit exceeded IP={} — max {} attempts/min", ip, LOGIN_CAPACITY);
                 exchange.getResponse().setStatusCode(HttpStatus.TOO_MANY_REQUESTS);
@@ -59,8 +70,7 @@ public class RateLimitFilter implements WebFilter {
             }
         }
 
-        // General rate limit
-        Bucket bucket = buckets.computeIfAbsent(ip, this::newBucket);
+        Bucket bucket = buckets.get(ip, k -> newBucket());
         if (bucket.tryConsume(1)) {
             return chain.filter(exchange);
         }
@@ -71,25 +81,46 @@ public class RateLimitFilter implements WebFilter {
         return exchange.getResponse().setComplete();
     }
 
-    private Bucket newBucket(String ip) {
+    private Bucket newBucket() {
         Bandwidth limit = Bandwidth.classic(CAPACITY,
                 Refill.greedy(REFILL_RATE, Duration.ofMinutes(1)));
         return Bucket.builder().addLimit(limit).build();
     }
 
-    private Bucket newLoginBucket(String ip) {
+    private Bucket newLoginBucket() {
         Bandwidth limit = Bandwidth.classic(LOGIN_CAPACITY,
                 Refill.greedy(LOGIN_CAPACITY, Duration.ofMinutes(1)));
         return Bucket.builder().addLimit(limit).build();
     }
 
+    /**
+     * Resolves client IP safely.
+     * X-Forwarded-For is only trusted when the TCP remote address is a loopback
+     * or private IP — meaning the connection came through a trusted proxy (Render, Nginx).
+     * A public IP in remoteAddress means a direct connection; use it as-is.
+     */
     private String resolveClientIp(ServerWebExchange exchange) {
-        // Respect X-Forwarded-For from Render/Nginx proxy
-        String forwarded = exchange.getRequest().getHeaders().getFirst("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
-        }
         var addr = exchange.getRequest().getRemoteAddress();
-        return addr != null ? addr.getAddress().getHostAddress() : "unknown";
+        String remoteIp = addr != null ? addr.getAddress().getHostAddress() : "unknown";
+
+        if (isTrustedProxy(remoteIp)) {
+            String forwarded = exchange.getRequest().getHeaders().getFirst("X-Forwarded-For");
+            if (forwarded != null && !forwarded.isBlank()) {
+                return forwarded.split(",")[0].trim();
+            }
+        }
+
+        return remoteIp;
+    }
+
+    private boolean isTrustedProxy(String ip) {
+        return ip.equals("127.0.0.1")
+            || ip.equals("::1")                // IPv6 loopback (compact form)
+            || ip.equals("0:0:0:0:0:0:0:1")   // IPv6 loopback (expanded form)
+            || ip.startsWith("10.")
+            || ip.startsWith("172.16.") || ip.startsWith("172.17.")
+            || ip.startsWith("172.18.") || ip.startsWith("172.19.")
+            || ip.startsWith("172.2")   || ip.startsWith("172.3")
+            || ip.startsWith("192.168.");
     }
 }

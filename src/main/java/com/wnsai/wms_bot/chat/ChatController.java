@@ -137,8 +137,11 @@ public class ChatController {
 
         long startMs = System.currentTimeMillis();
 
-        String detectedIntent = intentClassifier.classify(secureReq.message()).type().name();
-        double confidence     = intentClassifier.classify(secureReq.message()).confidence();
+        // Classify once — orchestrator also calls classify internally, but we need
+        // the result here for persistence. Two separate calls would be triple classification.
+        var    intentResult    = intentClassifier.classify(secureReq.message());
+        String detectedIntent  = intentResult.type().name();
+        double confidence      = intentResult.confidence();
 
         AtomicReference<StringBuilder> responseBuffer = new AtomicReference<>(new StringBuilder());
         AtomicLong                     firstTokenMs   = new AtomicLong(0);
@@ -161,11 +164,12 @@ public class ChatController {
                 System.currentTimeMillis() - startMs))
             .onErrorResume(e -> {
                 log.error("Chat pipeline error: {}", e.getMessage());
-                String errJson = toJson(ChatResponse.error("INTERNAL_ERROR"));
-                return Flux.just(ServerSentEvent.<String>builder()
-                    .event("message")
-                    .data(errJson)
-                    .build());
+                return Flux.just(
+                    ServerSentEvent.<String>builder().event("message")
+                        .data(toJson(ChatResponse.error("INTERNAL_ERROR"))).build(),
+                    ServerSentEvent.<String>builder().event("message")
+                        .data(toJson(ChatResponse.done())).build()
+                );
             });
     }
 
