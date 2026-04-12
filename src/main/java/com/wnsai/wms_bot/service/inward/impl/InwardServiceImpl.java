@@ -20,7 +20,6 @@ import reactor.core.scheduler.Schedulers;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -136,11 +135,13 @@ public class InwardServiceImpl implements InwardService {
 
     private void updateStock(String warehouseId, String itemName,
                               BigDecimal qty, String unit, boolean add) {
+        if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) {
+            log.warn("updateStock skipped — null or zero qty for item={}", itemName);
+            return;
+        }
         try {
-            List<StockInventory> items = stockRepo.findByWarehouseId(warehouseId);
-            StockInventory stock = items.stream()
-                    .filter(s -> s.getItemName().equalsIgnoreCase(itemName))
-                    .findFirst()
+            StockInventory stock = stockRepo
+                    .findByWarehouseIdAndItemNameIgnoreCase(warehouseId, itemName)
                     .orElse(null);
 
             if (stock == null) {
@@ -156,9 +157,9 @@ public class InwardServiceImpl implements InwardService {
                     log.info("New stock item created: {} in {}", itemName, warehouseId);
                 }
             } else {
-                BigDecimal newQty = add
-                        ? stock.getCurrentStock().add(qty)
-                        : stock.getCurrentStock().subtract(qty);
+                BigDecimal current = stock.getCurrentStock() != null
+                        ? stock.getCurrentStock() : BigDecimal.ZERO;
+                BigDecimal newQty = add ? current.add(qty) : current.subtract(qty);
                 stock.setCurrentStock(newQty.max(BigDecimal.ZERO));
                 stockRepo.save(stock);
                 log.info("Stock updated: {} -> {}", itemName, stock.getCurrentStock());

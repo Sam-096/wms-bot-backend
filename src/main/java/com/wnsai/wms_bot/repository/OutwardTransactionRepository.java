@@ -38,9 +38,10 @@ public interface OutwardTransactionRepository extends JpaRepository<OutwardTrans
             @Param("dateTo")   LocalDate dateTo,
             Pageable pageable);
 
-    /** Count APPROVED outward dispatches for today (used in live AI context). */
+    /** Count outward transactions APPROVED today (uses approvedAt timestamp, not planned outwardDate). */
     @Query("SELECT COUNT(o) FROM OutwardTransaction o WHERE o.warehouseId = :wid " +
-           "AND o.status = 'APPROVED' AND o.outwardDate = :today")
+           "AND o.status = 'APPROVED' AND o.approvedAt IS NOT NULL " +
+           "AND CAST(o.approvedAt AS LocalDate) = :today")
     long countTodayDispatched(@Param("wid") String warehouseId, @Param("today") LocalDate today);
 
     @Modifying

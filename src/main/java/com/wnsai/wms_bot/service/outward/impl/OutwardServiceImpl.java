@@ -21,7 +21,6 @@ import reactor.core.scheduler.Schedulers;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -112,25 +111,25 @@ public class OutwardServiceImpl implements OutwardService {
     }
 
     private void checkStock(String warehouseId, String itemName, BigDecimal required) {
-        List<StockInventory> items = stockRepo.findByWarehouseId(warehouseId);
-        StockInventory stock = items.stream()
-                .filter(s -> s.getItemName().equalsIgnoreCase(itemName))
-                .findFirst().orElse(null);
+        StockInventory stock = stockRepo
+                .findByWarehouseIdAndItemNameIgnoreCase(warehouseId, itemName)
+                .orElse(null);
 
-        double available = stock != null ? stock.getCurrentStock().doubleValue() : 0.0;
-        if (available < required.doubleValue()) {
-            throw new InsufficientStockException(itemName, available, required.doubleValue());
+        BigDecimal currentStock = (stock != null && stock.getCurrentStock() != null)
+                ? stock.getCurrentStock() : BigDecimal.ZERO;
+        if (currentStock.compareTo(required) < 0) {
+            throw new InsufficientStockException(itemName,
+                    currentStock.doubleValue(), required.doubleValue());
         }
     }
 
     private void deductStock(String warehouseId, String itemName, BigDecimal qty) {
         try {
-            List<StockInventory> items = stockRepo.findByWarehouseId(warehouseId);
-            items.stream()
-                    .filter(s -> s.getItemName().equalsIgnoreCase(itemName))
-                    .findFirst()
+            stockRepo.findByWarehouseIdAndItemNameIgnoreCase(warehouseId, itemName)
                     .ifPresent(s -> {
-                        s.setCurrentStock(s.getCurrentStock().subtract(qty).max(BigDecimal.ZERO));
+                        BigDecimal current = s.getCurrentStock() != null
+                                ? s.getCurrentStock() : BigDecimal.ZERO;
+                        s.setCurrentStock(current.subtract(qty).max(BigDecimal.ZERO));
                         stockRepo.save(s);
                     });
         } catch (Exception e) {

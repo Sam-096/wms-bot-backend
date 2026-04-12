@@ -12,6 +12,8 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import org.springframework.data.domain.PageRequest;
+
 import java.time.LocalDate;
 import java.util.List;
 
@@ -53,12 +55,11 @@ public class PromptContextService {
     // ─── Private ──────────────────────────────────────────────────────────────
 
     private LiveWarehouseContext buildContext(String warehouseId) {
-        int vehiclesInside   = gatePassRepo.findActiveByWarehouseId(warehouseId).size();
+        int vehiclesInside   = (int) gatePassRepo.countByWarehouseIdAndStatus(warehouseId, "OPEN");
         int pendingInward    = (int) inwardRepo.countByWarehouseIdAndStatus(warehouseId, "PENDING");
         int todayDispatched  = (int) outwardRepo.countTodayDispatched(warehouseId, LocalDate.now());
-        List<StockEntry> low = stockRepo.findLowStockItems(warehouseId)
+        List<StockEntry> low = stockRepo.findLowStockItems(warehouseId, PageRequest.of(0, 10))
                 .stream()
-                .limit(10) // cap at 10 for prompt size
                 .map(s -> new StockEntry(
                         s.getItemName(),
                         s.getCurrentStock() != null ? s.getCurrentStock().toPlainString() : "0",

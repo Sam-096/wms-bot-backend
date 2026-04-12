@@ -41,42 +41,80 @@ public class WMSPromptBuilder {
             ===================================================
 
             1. GATE OPERATIONS
-               - Gate Entry       -> Gate Operations > Gate Entries > + New
-               - Gate Pass Out    -> Gate Operations > Gate Pass Outs > + New
-               - Vehicle Tracking -> Gate Operations > Vehicle Status
-               - Weighbridge      -> Gate Operations > Weighbridge > Record Weight
+               - Gate Entry          -> Gate Operations > Gate Entries > + New
+               - Gate Pass Out       -> Gate Operations > Gate Pass Outs > + New
+               - Vehicle Tracking    -> Gate Operations > Vehicle Status
+               - Driver Verification -> Gate Operations > Driver KYC
+               - Weighbridge Entry   -> Gate Operations > Weighbridge > Record Weight
+               - Parking Slot        -> Gate Operations > Parking Management
 
             2. OPERATIONS
-               - Inward Receipt   -> Operations > Inward Receipts > + New
-               - Outward Dispatch -> Operations > Outward Dispatch > + New
-               - Stack Management -> Operations > Stack Cards
-               - Bonds            -> Operations > Bonds
-               - Inventory        -> Operations > Inventory
+               - Inward Receipt      -> Operations > Inward Receipts > + New
+               - Outward Dispatch    -> Operations > Outward Dispatch > + New
+               - Stack Management    -> Operations > Stack Cards
+               - Lot Transfer        -> Operations > Lot Transfer > + New
+               - Bonds               -> Operations > Bonds
+               - Inventory           -> Operations > Inventory
+               - Physical Count      -> Operations > Stock Reconciliation
 
             3. QUALITY CONTROL
-               - Sampling         -> QC > Sample Collection > + New
-               - Moisture Check   -> QC > Moisture Analysis
-               - Grade Assignment -> QC > Grading > Assign Grade
+               - Sampling            -> QC > Sample Collection > + New
+               - Moisture Check      -> QC > Moisture Analysis
+               - Grade Assignment    -> QC > Grading > Assign Grade
+               - Rejection Entry     -> QC > Rejections > + New
+               - QC Certificate      -> QC > Certificates > Generate
 
             4. DOCUMENTATION
-               - Warehouse Receipt -> Documents > WHR > Generate
-               - Delivery Order    -> Documents > Delivery Order > + New
-               - E-Way Bill        -> Documents > E-Way Bill > Create
+               - Warehouse Receipt   -> Documents > WHR > Generate
+               - Delivery Order      -> Documents > Delivery Order > + New
+               - Release Order       -> Documents > Release Order > + New
+               - Stack Card Print    -> Documents > Stack Cards > Print
+               - E-Way Bill          -> Documents > E-Way Bill > Create
 
             5. BOND & COLLATERAL
-               - Create Bond      -> Bonds > + New Bond
-               - Bond Extension   -> Bonds > [Select Bond] > Extend
-               - Pledge/Unpledge  -> Bonds > Pledge Management
+               - Create Bond         -> Bonds > + New Bond
+               - Bond Extension      -> Bonds > [Select Bond] > Extend
+               - Pledge/Unpledge     -> Bonds > Pledge Management
+               - Collateral Mgmt     -> Bonds > Collateral > Update
+               - Lien Marking        -> Bonds > Lien > Mark/Release
+               - Insurance Tracking  -> Bonds > Insurance > Update
 
             6. FINANCE
-               - Invoices         -> Finance > Invoices > + New
-               - Payments         -> Finance > Payments > Record
-               - GST Reports      -> Finance > Tax > GST Summary
+               - Invoices            -> Finance > Invoices > + New
+               - Payments Received   -> Finance > Payments > Record
+               - Advance Collection  -> Finance > Advance > Collect
+               - Rent Calculation    -> Finance > Rent > Calculate
+               - GST Reports         -> Finance > Tax > GST Summary
+               - Outstanding Report  -> Finance > Receivables
 
-            7. REPORTS
-               - Stock Summary    -> Reports > Stock Summary
-               - Bond Report      -> Reports > Bond Report
-               - Daily Movement   -> Reports > Daily In/Out
+            7. PARTY MANAGEMENT
+               - Customers           -> Party Management > Customers > + New
+               - Transporters        -> Party Management > Transporters
+               - Loan Eligibility    -> Party Management > Loan Eligibility
+               - KYC Update          -> Party Management > [Party] > KYC
+               - Credit Limit        -> Party Management > Credit Limits
+
+            8. ALERTS & COMPLIANCE
+               - Bond Expiry         -> Alerts > Bond Expiry
+               - Insurance Expiry    -> Alerts > Insurance Due
+               - Rent Overdue        -> Alerts > Rent Pending
+               - Customs Payment     -> Alerts > Customs Dues
+               - License Renewal     -> Compliance > Licenses
+
+            9. REPORTS
+               - Stock Summary       -> Reports > Stock Summary
+               - Bond Report         -> Reports > Bond Report
+               - Daily Movement      -> Reports > Daily In/Out
+               - Aging Report        -> Reports > Stock Aging
+               - Occupancy Report    -> Reports > Warehouse Occupancy
+               - MIS Dashboard       -> Reports > MIS
+
+            10. SETTINGS & MASTERS
+                - Commodity Master   -> Settings > Masters > Commodity
+                - Godown Setup       -> Settings > Masters > Godowns
+                - User Management    -> Settings > Users
+                - Role Permissions   -> Settings > Roles
+                - SOP Documents      -> Settings > SOPs
 
             ===================================================
             RESPONSE RULES:
@@ -205,16 +243,22 @@ public class WMSPromptBuilder {
                 CAN ACCESS: Dashboard, Inward, Outward, Gate Ops, Bonds, Inventory, Reports
                 CANNOT ACCESS: User Management, Role Permissions, System Settings
                 FOCUS: Oversight, approvals, bond management, compliance
+                If asked about user management or system settings, respond with exactly:
+                {"type":"ACCESS_DENIED","content":"User management is restricted to administrators.","data":[{"label":"Go to Dashboard","route":"/dashboard"}]}
                 """;
             case "OPERATOR" -> """
                 CAN ACCESS: Inward Entries, Outward Dispatch, Gate Passes
                 CANNOT ACCESS: Bonds, Reports, Finance, Settings, User Management
                 FOCUS: Daily entry/exit operations only
+                If asked about anything outside your access, respond with exactly:
+                {"type":"ACCESS_DENIED","content":"You don't have access to that feature. Your available actions are Inward, Outward, Gate Pass.","data":[{"label":"New Inward","route":"/inward/new"},{"label":"New Outward","route":"/outward/new"},{"label":"Gate Pass","route":"/gate-operations"}]}
                 """;
             case "VIEWER"   -> """
                 CAN ACCESS: Dashboard (view only), Reports (view only)
                 CANNOT ACCESS: Create or edit anything
                 FOCUS: Help user find the right report or dashboard view
+                If user tries to create or modify anything, respond with exactly:
+                {"type":"ACCESS_DENIED","content":"You have read-only access. Would you like to view the relevant report instead?","data":[{"label":"View Reports","route":"/reports"},{"label":"Dashboard","route":"/dashboard"}]}
                 """;
             case "DRIVER"     -> "CAN: Gate status, Gate Pass Out, Parking. CANNOT: Stock, Bond, Finance.";
             case "GATEKEEPER" -> "CAN: Gate Entry, Gate Pass Out, Weighbridge. CANNOT: Bond, Finance, Inventory.";
