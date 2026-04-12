@@ -24,7 +24,6 @@ public class WarehouseController {
     private final WarehouseRepository warehouseRepo;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','OPERATOR','GATE_STAFF','VIEWER')")
     public Mono<List<Warehouse>> listActive() {
         return Mono.fromCallable(warehouseRepo::findByIsActiveTrue)
                    .subscribeOn(Schedulers.boundedElastic())

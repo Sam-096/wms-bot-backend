@@ -77,7 +77,8 @@ public class SecurityConfig {
                 ).permitAll()
                 .pathMatchers(HttpMethod.GET,
                     "/actuator/health",
-                    "/actuator/info"
+                    "/actuator/info",
+                    "/api/v1/warehouses"   // needed on login/register page (no JWT yet)
                 ).permitAll()
                 .pathMatchers("/api/bot/**").permitAll()
 
