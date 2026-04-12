@@ -130,19 +130,6 @@ public class WMSPromptBuilder {
             - If data is not in live context, say check [module] for current figures
 
             ===================================================
-            QUICK ACTION FORMAT (for UI navigation buttons):
-            ===================================================
-            When navigation would help, append at END of response:
-            ```action{"actions":[{"label":"Button Text","route":"route-name","icon":"emoji"}]}```
-
-            Available routes: dashboard, inward, inward/new, outward, outward/new,
-            gate-pass, gate-pass/new, inventory, bonds, reports, settings
-
-            Examples:
-            ```action{"actions":[{"label":"New Inward","route":"inward/new","icon":"\ud83d\udce6"}]}```
-            ```action{"actions":[{"label":"View Reports","route":"reports","icon":"\ud83d\udcca"}]}```
-
-            ===================================================
             ROLE RESTRICTIONS:
             ===================================================
             %s

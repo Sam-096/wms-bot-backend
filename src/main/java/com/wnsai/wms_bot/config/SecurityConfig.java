@@ -118,7 +118,11 @@ public class SecurityConfig {
                 .pathMatchers("/api/v1/chat/**")
                     .hasAnyRole("ADMIN", "MANAGER", "OPERATOR", "GATE_STAFF", "VIEWER")
 
-                // ── 5. Everything else requires auth ──────────────────────
+                // ── 5. Warehouse lookup (all authenticated roles) ─────────
+                .pathMatchers("/api/v1/warehouses/**")
+                    .hasAnyRole("ADMIN", "MANAGER", "OPERATOR", "GATE_STAFF", "VIEWER")
+
+                // ── 6. Everything else requires auth ──────────────────────
                 .anyExchange().authenticated()
             )
             .build();

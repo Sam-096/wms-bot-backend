@@ -27,6 +27,10 @@ public class ResponseCleanerUtil {
     private static final Pattern THINK_PATTERN =
             Pattern.compile("(?s)<think>.*?</think>\\s*");
 
+    // Strips ```action{...}``` blocks the LLM may have been prompted to emit
+    private static final Pattern ACTION_BLOCK_PATTERN =
+            Pattern.compile("(?s)```action\\{.*?}```\\s*");
+
     // ─── String mode ──────────────────────────────────────────────────────────
 
     /**
@@ -35,7 +39,9 @@ public class ResponseCleanerUtil {
      */
     public String stripThinkTags(String raw) {
         if (raw == null || raw.isBlank()) return raw;
-        return THINK_PATTERN.matcher(raw).replaceAll("").trim();
+        String cleaned = THINK_PATTERN.matcher(raw).replaceAll("");
+        cleaned = ACTION_BLOCK_PATTERN.matcher(cleaned).replaceAll("");
+        return cleaned.trim();
     }
 
     // ─── Streaming mode ───────────────────────────────────────────────────────
@@ -110,9 +116,11 @@ public class ResponseCleanerUtil {
                     }
                 }
 
-                case PASS_THROUGH ->
-                    // Normal streaming — pass token through immediately
-                    new CleanState(Phase.PASS_THROUGH, "", curr);
+                case PASS_THROUGH -> {
+                    // Strip any action blocks that arrive mid-stream
+                    String out = ACTION_BLOCK_PATTERN.matcher(curr).replaceAll("");
+                    yield new CleanState(Phase.PASS_THROUGH, "", out);
+                }
             };
         }
     }
