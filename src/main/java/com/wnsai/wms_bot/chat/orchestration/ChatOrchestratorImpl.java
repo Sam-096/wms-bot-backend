@@ -100,7 +100,7 @@ public class ChatOrchestratorImpl implements ChatOrchestrator {
             case GREETING -> {
                 String text = quickResponder.greet(req.language());
                 log.info("GREETING response in {}ms", System.currentTimeMillis() - start);
-                yield Flux.just(ChatResponse.instant(text));
+                yield Flux.just(ChatResponse.instant(text), ChatResponse.done());
             }
 
             // Navigation: route resolution, < 100ms
@@ -116,7 +116,10 @@ public class ChatOrchestratorImpl implements ChatOrchestrator {
                     }
                     log.info("NAVIGATION -> {} in {}ms",
                         route, System.currentTimeMillis() - start);
-                    yield Flux.just(ChatResponse.navigation(route, cmd.get().label()));
+                    yield Flux.just(
+                        ChatResponse.navigation(route, cmd.get().label()),
+                        ChatResponse.done()
+                    );
                 }
                 yield streamWithLiveContext(req, "", start);
             }
@@ -127,6 +130,7 @@ public class ChatOrchestratorImpl implements ChatOrchestrator {
                 yield quickResponder.handleQuickQuery(entity, req.warehouseId())
                     .map(ChatResponse::instant)
                     .flux()
+                    .concatWith(Flux.just(ChatResponse.done()))
                     .doOnComplete(() -> log.info("QUICK_QUERY done in {}ms",
                         System.currentTimeMillis() - start));
             }
