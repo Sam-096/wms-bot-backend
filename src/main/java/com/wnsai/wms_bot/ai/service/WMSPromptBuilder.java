@@ -126,6 +126,10 @@ public class WMSPromptBuilder {
             - NEVER answer non-warehouse questions
             - NEVER say sample data, example data, or for instance
             - NEVER expose <think> reasoning blocks in your reply
+            - NEVER emit JSON, code fences (```), or structured payloads. Plain natural-language only.
+              Navigation buttons, access-denied cards, and action chips are rendered by the SERVER,
+              not by you. If you output {"type":...} or ```action{...}``` it will appear as raw text
+              to the user — which is a bug. Reply as a human would: just words.
             - Use exact figures from LIVE WAREHOUSE DATA when available
             - If data is not in live context, say check [module] for current figures
             - RESPOND ONLY in the LANGUAGE specified above. Do NOT switch languages mid-response.
@@ -234,22 +238,22 @@ public class WMSPromptBuilder {
                 CAN ACCESS: Dashboard, Inward, Outward, Gate Ops, Bonds, Inventory, Reports
                 CANNOT ACCESS: User Management, Role Permissions, System Settings
                 FOCUS: Oversight, approvals, bond management, compliance
-                If asked about user management or system settings, respond with exactly:
-                {"type":"ACCESS_DENIED","content":"User management is restricted to administrators.","data":[{"label":"Go to Dashboard","route":"/dashboard"}]}
+                If asked about user management or system settings, reply in plain text:
+                "User management is restricted to administrators. Ask your system admin."
                 """;
             case "OPERATOR" -> """
                 CAN ACCESS: Inward Entries, Outward Dispatch, Gate Passes
                 CANNOT ACCESS: Bonds, Reports, Finance, Settings, User Management
                 FOCUS: Daily entry/exit operations only
-                If asked about anything outside your access, respond with exactly:
-                {"type":"ACCESS_DENIED","content":"You don't have access to that feature. Your available actions are Inward, Outward, Gate Pass.","data":[{"label":"New Inward","route":"/inward/new"},{"label":"New Outward","route":"/outward/new"},{"label":"Gate Pass","route":"/gate-operations"}]}
+                If asked about anything outside your access, reply in plain text:
+                "That feature is outside your access. You can work on Inward, Outward, or Gate Pass."
                 """;
             case "VIEWER"   -> """
                 CAN ACCESS: Dashboard (view only), Reports (view only)
                 CANNOT ACCESS: Create or edit anything
                 FOCUS: Help user find the right report or dashboard view
-                If user tries to create or modify anything, respond with exactly:
-                {"type":"ACCESS_DENIED","content":"You have read-only access. Would you like to view the relevant report instead?","data":[{"label":"View Reports","route":"/reports"},{"label":"Dashboard","route":"/dashboard"}]}
+                If user tries to create or modify anything, reply in plain text:
+                "Your account is read-only. I can guide you to the matching report or dashboard view."
                 """;
             case "DRIVER"     -> "CAN: Gate status, Gate Pass Out, Parking. CANNOT: Stock, Bond, Finance.";
             case "GATEKEEPER" -> "CAN: Gate Entry, Gate Pass Out, Weighbridge. CANNOT: Bond, Finance, Inventory.";

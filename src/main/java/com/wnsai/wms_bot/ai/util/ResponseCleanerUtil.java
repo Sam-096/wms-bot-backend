@@ -31,6 +31,17 @@ public class ResponseCleanerUtil {
     private static final Pattern ACTION_BLOCK_PATTERN =
             Pattern.compile("(?s)```action\\{.*?}```\\s*");
 
+    // Safety net: strips JSON-like envelopes the LLM may hallucinate, e.g.
+    //   {"type":"ACCESS_DENIED", ...}   or   {\"type\":\"INFO\", ...}
+    // Matches a brace-balanced object that starts with (optionally escaped) "type":
+    // Non-greedy up to the first closing brace that follows a quoted value or ].
+    private static final Pattern JSON_ENVELOPE_PATTERN =
+            Pattern.compile("(?s)\\{\\s*[\\\\]?\"type[\\\\]?\"\\s*:.*?\\}(?:\\s*\\])?\\s*");
+
+    // Strips raw ``` code fences entirely — frontend renders plain text
+    private static final Pattern CODE_FENCE_PATTERN =
+            Pattern.compile("(?s)```[a-zA-Z]*\\n?.*?```\\s*");
+
     // ─── String mode ──────────────────────────────────────────────────────────
 
     /**
@@ -41,6 +52,8 @@ public class ResponseCleanerUtil {
         if (raw == null || raw.isBlank()) return raw;
         String cleaned = THINK_PATTERN.matcher(raw).replaceAll("");
         cleaned = ACTION_BLOCK_PATTERN.matcher(cleaned).replaceAll("");
+        cleaned = JSON_ENVELOPE_PATTERN.matcher(cleaned).replaceAll("");
+        cleaned = CODE_FENCE_PATTERN.matcher(cleaned).replaceAll("");
         return cleaned.trim();
     }
 
@@ -117,8 +130,26 @@ public class ResponseCleanerUtil {
                 }
 
                 case PASS_THROUGH -> {
-                    // Strip any action blocks that arrive mid-stream
+                    // Strip action blocks, JSON envelopes, and code fences mid-stream.
+                    // If the token starts a brace that could be an envelope, buffer it
+                    // until we see a closing brace or hit a size guard.
+                    int openIdx = curr.indexOf('{');
+                    if (openIdx >= 0) {
+                        String afterBrace = curr.substring(openIdx);
+                        boolean looksLikeEnvelope =
+                                afterBrace.startsWith("{\"type")
+                             || afterBrace.startsWith("{ \"type")
+                             || afterBrace.startsWith("{\\\"type")
+                             || afterBrace.startsWith("{\n\"type");
+                        if (looksLikeEnvelope && !afterBrace.contains("}")) {
+                            // buffer — wait for closing brace
+                            String pre = curr.substring(0, openIdx);
+                            yield new CleanState(Phase.PASS_THROUGH, afterBrace, pre);
+                        }
+                    }
                     String out = ACTION_BLOCK_PATTERN.matcher(curr).replaceAll("");
+                    out = JSON_ENVELOPE_PATTERN.matcher(out).replaceAll("");
+                    out = CODE_FENCE_PATTERN.matcher(out).replaceAll("");
                     yield new CleanState(Phase.PASS_THROUGH, "", out);
                 }
             };

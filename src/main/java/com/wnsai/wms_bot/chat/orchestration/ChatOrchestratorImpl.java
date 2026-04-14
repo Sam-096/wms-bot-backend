@@ -15,6 +15,7 @@ import com.wnsai.wms_bot.navigation.NavigationCommand;
 import com.wnsai.wms_bot.navigation.NavigationResolver;
 import com.wnsai.wms_bot.quick.QuickResponder;
 import com.wnsai.wms_bot.repository.ChatSessionRepository;
+import com.wnsai.wms_bot.security.RoleAccessPolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -47,6 +48,7 @@ public class ChatOrchestratorImpl implements ChatOrchestrator {
     private final PromptContextService promptContextService;  // live DB stats
     private final ResponseCleanerUtil  responseCleaner;       // strips <think> tags
     private final ChatSessionRepository sessionRepo;           // for language fallback
+    private final RoleAccessPolicy      roleAccessPolicy;       // server-side RBAC gate
 
     @Override
     public Flux<ChatResponse> handle(ChatRequest req) {
@@ -105,10 +107,16 @@ public class ChatOrchestratorImpl implements ChatOrchestrator {
             case NAVIGATION -> {
                 Optional<NavigationCommand> cmd = navigationResolver.resolve(req.message());
                 if (cmd.isPresent()) {
+                    String route = cmd.get().route();
+                    Optional<ChatResponse> denied = roleAccessPolicy.check(req.role(), route);
+                    if (denied.isPresent()) {
+                        log.info("NAVIGATION denied role={} route={} in {}ms",
+                            req.role(), route, System.currentTimeMillis() - start);
+                        yield Flux.just(denied.get(), ChatResponse.done());
+                    }
                     log.info("NAVIGATION -> {} in {}ms",
-                        cmd.get().route(), System.currentTimeMillis() - start);
-                    yield Flux.just(ChatResponse.navigation(
-                        cmd.get().route(), cmd.get().label()));
+                        route, System.currentTimeMillis() - start);
+                    yield Flux.just(ChatResponse.navigation(route, cmd.get().label()));
                 }
                 yield streamWithLiveContext(req, "", start);
             }
