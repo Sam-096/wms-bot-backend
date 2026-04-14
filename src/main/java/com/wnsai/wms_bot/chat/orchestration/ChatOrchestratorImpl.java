@@ -14,11 +14,13 @@ import com.wnsai.wms_bot.intent.IntentResult;
 import com.wnsai.wms_bot.navigation.NavigationCommand;
 import com.wnsai.wms_bot.navigation.NavigationResolver;
 import com.wnsai.wms_bot.quick.QuickResponder;
+import com.wnsai.wms_bot.repository.ChatSessionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.Optional;
 
@@ -44,14 +46,51 @@ public class ChatOrchestratorImpl implements ChatOrchestrator {
     private final WMSPromptBuilder    promptBuilder;
     private final PromptContextService promptContextService;  // live DB stats
     private final ResponseCleanerUtil  responseCleaner;       // strips <think> tags
+    private final ChatSessionRepository sessionRepo;           // for language fallback
 
     @Override
     public Flux<ChatResponse> handle(ChatRequest req) {
+        return resolveEffectiveLanguage(req)
+            .flatMapMany(effectiveLang -> dispatch(withLanguage(req, effectiveLang)));
+    }
+
+    /**
+     * Language resolution precedence:
+     *   1. request.language (if non-blank) — user just picked a language
+     *   2. ChatSession.language           — user's previous choice for this session
+     *   3. "en" default
+     */
+    private Mono<String> resolveEffectiveLanguage(ChatRequest req) {
+        if (req.language() != null && !req.language().isBlank()) {
+            return Mono.just(req.language().toLowerCase());
+        }
+        if (req.sessionId() == null || req.sessionId().isBlank()) {
+            return Mono.just("en");
+        }
+        return Mono.fromCallable(() ->
+                sessionRepo.findBySessionId(req.sessionId())
+                    .map(s -> s.getLanguage())
+                    .filter(l -> l != null && !l.isBlank())
+                    .map(String::toLowerCase)
+                    .orElse("en"))
+            .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private ChatRequest withLanguage(ChatRequest req, String language) {
+        return new ChatRequest(
+            req.message(), language, req.role(),
+            req.warehouseId(), req.sessionId(), req.warehouseName(),
+            req.context(), req.userId()
+        );
+    }
+
+    private Flux<ChatResponse> dispatch(ChatRequest req) {
         long start = System.currentTimeMillis();
 
         IntentResult intent = intentClassifier.classify(req.message());
-        log.info("SessionId={} intent={} confidence={} warehouseId={}",
-            req.sessionId(), intent.type(), intent.confidence(), req.warehouseId());
+        log.info("SessionId={} intent={} confidence={} warehouseId={} lang={}",
+            req.sessionId(), intent.type(), intent.confidence(),
+            req.warehouseId(), req.language());
 
         return switch (intent.type()) {
 

@@ -128,6 +128,9 @@ public class WMSPromptBuilder {
             - NEVER expose <think> reasoning blocks in your reply
             - Use exact figures from LIVE WAREHOUSE DATA when available
             - If data is not in live context, say check [module] for current figures
+            - RESPOND ONLY in the LANGUAGE specified above. Do NOT switch languages mid-response.
+            - Keep these WMS technical terms in English even inside another language:
+              Inward, Outward, Gate Pass, GRN, Bond, Stock, Dashboard, Reports, SKU, Bags
 
             ===================================================
             ROLE RESTRICTIONS:
@@ -188,18 +191,19 @@ public class WMSPromptBuilder {
     // Private helpers
 
     private String getLanguage(String lang) {
-        if (lang == null || lang.isBlank()) return "English - simple, clear, no jargon";
+        if (lang == null || lang.isBlank())
+            return "RESPOND ONLY IN ENGLISH. Simple, clear, no jargon.";
         return switch (lang.toLowerCase()) {
-            case "te" -> "Telugu - use warehouse talk, mix English terms like Inward, Gate Pass, Bond";
-            case "hi" -> "Hindi - simple warehouse Hindi, keep English for: Entry, Pass, Stock, Bond";
-            case "ta" -> "Tamil - simple daily Tamil, English for technical terms";
-            case "kn" -> "Kannada - simple daily Kannada, English for technical terms";
-            case "mr" -> "Marathi - simple daily Marathi, English for technical terms";
-            case "bn" -> "Bengali - simple daily Bengali, English for technical terms";
-            case "gu" -> "Gujarati - simple daily Gujarati, English for technical terms";
-            case "pa" -> "Punjabi - simple daily Punjabi, English for technical terms";
-            case "or" -> "Odia - simple daily Odia, English for technical terms";
-            default   -> "English - simple, clear, no jargon";
+            case "te" -> "RESPOND ONLY IN TELUGU (తెలుగు). Use natural warehouse talk. Keep WMS terms in English (Inward, Gate Pass, Bond).";
+            case "hi" -> "RESPOND ONLY IN HINDI (हिन्दी). Simple warehouse Hindi. Keep WMS terms in English (Entry, Pass, Stock, Bond).";
+            case "ta" -> "RESPOND ONLY IN TAMIL (தமிழ்). Simple daily Tamil. Keep WMS terms in English.";
+            case "kn" -> "RESPOND ONLY IN KANNADA (ಕನ್ನಡ). Simple daily Kannada. Keep WMS terms in English.";
+            case "mr" -> "RESPOND ONLY IN MARATHI (मराठी). Simple daily Marathi. Keep WMS terms in English.";
+            case "bn" -> "RESPOND ONLY IN BENGALI (বাংলা). Simple daily Bengali. Keep WMS terms in English.";
+            case "gu" -> "RESPOND ONLY IN GUJARATI (ગુજરાતી). Simple daily Gujarati. Keep WMS terms in English.";
+            case "pa" -> "RESPOND ONLY IN PUNJABI (ਪੰਜਾਬੀ). Simple daily Punjabi. Keep WMS terms in English.";
+            case "or" -> "RESPOND ONLY IN ODIA (ଓଡ଼ିଆ). Simple daily Odia. Keep WMS terms in English.";
+            default   -> "RESPOND ONLY IN ENGLISH. Simple, clear, no jargon.";
         };
     }
 

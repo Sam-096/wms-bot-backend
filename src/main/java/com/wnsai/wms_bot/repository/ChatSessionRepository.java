@@ -32,4 +32,9 @@ public interface ChatSessionRepository extends JpaRepository<ChatSession, UUID> 
     @Transactional
     @Query("UPDATE ChatSession s SET s.isDeleted = true WHERE s.sessionId = :sessionId")
     void softDelete(@Param("sessionId") String sessionId);
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE ChatSession s SET s.language = :language WHERE s.sessionId = :sessionId")
+    void updateLanguage(@Param("sessionId") String sessionId, @Param("language") String language);
 }

@@ -315,6 +315,18 @@ public class ChatController {
                 saved -> {},
                 err   -> log.error("persistAsync failed: {}", err.getMessage())
             );
+
+        // Keep session.language in sync — so future requests w/o a language fall back correctly
+        if (req.sessionId() != null && !req.sessionId().isBlank()
+            && req.language() != null && !req.language().isBlank()) {
+            Mono.fromRunnable(() -> chatSessionRepo.updateLanguage(req.sessionId(), req.language()))
+                .subscribeOn(Schedulers.boundedElastic())
+                .subscribe(
+                    v   -> {},
+                    err -> log.warn("updateLanguage failed for session {}: {}",
+                        req.sessionId(), err.getMessage())
+                );
+        }
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
