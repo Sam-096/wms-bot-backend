@@ -79,6 +79,9 @@ public class QuickResponseService implements QuickResponder {
     @Override
     public Mono<String> handleQuickQuery(String entity, String warehouseId) {
         if (entity == null) return Mono.just("సమాచారం అందుబాటులో లేదు. Admin ని contact చేయండి 📞");
+        if (warehouseId == null || warehouseId.isBlank()) {
+            return Mono.just("⚠️ Warehouse not selected. Please select a warehouse to view live data.");
+        }
         return switch (entity) {
             case "LOW_STOCK"          -> quickStock(warehouseId);
             case "PENDING_INWARD"     -> quickPending(warehouseId);

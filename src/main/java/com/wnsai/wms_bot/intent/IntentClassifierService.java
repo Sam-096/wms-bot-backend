@@ -73,12 +73,27 @@ public class IntentClassifierService implements IntentClassifier {
         return null;
     }
 
-    /** Nav intent = message has navigation verbs/markers in any language */
+    /** Nav intent = message has navigation verbs/markers in any of the 10 supported languages */
     private boolean isNavIntent(String lower) {
         return matchesAny(lower, java.util.List.of(
+            // English
+            "go to", "open", "navigate", "take me", "show", "page",
+            // Telugu
             "వెళ్ళు", "చూపించు", "తెరవు", "పేజీ",
-            "go to", "open", "navigate", "take me", "show",
-            "जाओ", "खोलो", "दिखाओ"
+            // Hindi / Marathi (Devanagari)
+            "जाओ", "खोलो", "दिखाओ", "पेज", "पृष्ठ",
+            // Tamil
+            "செல்", "திற", "காட்டு", "பக்கம்",
+            // Kannada
+            "ಹೋಗು", "ತೆರೆ", "ತೋರಿಸು", "ಪುಟ",
+            // Bengali
+            "যাও", "খোলো", "দেখাও", "পাতা",
+            // Gujarati
+            "જાઓ", "ખોલો", "બતાવો", "પેજ",
+            // Punjabi
+            "ਜਾਓ", "ਖੋਲ੍ਹੋ", "ਦਿਖਾਓ", "ਪੰਨਾ",
+            // Odia
+            "ଯାଅ", "ଖୋଲ", "ଦେଖାଅ", "ପୃଷ୍ଠା"
         ));
     }
 

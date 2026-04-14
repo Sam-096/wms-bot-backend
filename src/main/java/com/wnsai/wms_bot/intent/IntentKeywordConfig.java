@@ -13,12 +13,27 @@ import java.util.List;
 @ConfigurationProperties(prefix = "intent.keywords")
 public class IntentKeywordConfig {
 
-    // Telugu + Hindi + English greetings
+    // All 10 supported languages + common English
     private List<String> greeting = new ArrayList<>(List.of(
-        "హలో", "నమస్కారం", "hi", "hello", "hey", "నమస్తే",
-        "good morning", "శుభోదయం", "కేమ్ ఉన్నావ్",
-        "namaste", "namaskar", "hii", "heya", "sup",
-        "नमस्ते", "नमस्कार", "हेलो", "हाय"
+        // English
+        "hi", "hello", "hey", "hii", "heya", "sup", "good morning",
+        "namaste", "namaskar",
+        // Telugu
+        "హలో", "నమస్కారం", "నమస్తే", "శుభోదయం", "కేమ్ ఉన్నావ్",
+        // Hindi / Marathi (shared Devanagari)
+        "नमस्ते", "नमस्कार", "हेलो", "हाय",
+        // Tamil
+        "வணக்கம்", "ஹாய்", "ஹலோ",
+        // Kannada
+        "ನಮಸ್ಕಾರ", "ಹಲೋ", "ಹಾಯ್",
+        // Bengali
+        "নমস্কার", "হ্যালো", "হাই",
+        // Gujarati
+        "નમસ્કાર", "નમસ્તે", "હેલો",
+        // Punjabi
+        "ਸਤ ਸ੍ਰੀ ਅਕਾਲ", "ਨਮਸਕਾਰ", "ਹੈਲੋ",
+        // Odia
+        "ନମସ୍କାର", "ହେଲୋ"
     ));
 
     // Navigation trigger phrases

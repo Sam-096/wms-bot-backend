@@ -14,7 +14,9 @@ public record ChatRequest(
              message = "Invalid language code")
     String language,
 
-    @Pattern(regexp = "^(driver|gatekeeper|supervisor|qc_officer|manager|accountant|lender|auditor|customer|admin)?$",
+    // Case-insensitive — server always overrides this with the JWT role anyway,
+    // but we still validate shape so a wildly malformed value surfaces as 400.
+    @Pattern(regexp = "(?i)^(admin|manager|operator|viewer|gate_staff|driver|gatekeeper|supervisor|qc_officer|accountant|lender|auditor|customer)?$",
              message = "Invalid role")
     String role,
 
