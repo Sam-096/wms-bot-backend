@@ -40,7 +40,7 @@ public class GroqProvider implements LLMProvider {
     public GroqProvider(
             @Value("${groq.api-key:}")                               String apiKey,
             @Value("${groq.base-url:https://api.groq.com/openai/v1}") String baseUrl,
-            @Value("${groq.model:llama3-8b-8192}")                   String model,
+            @Value("${groq.model:llama-3.1-8b-instant}")             String model,
             @Value("${groq.timeout:8000}")                           int timeoutMs,
             CircuitBreakerRegistry circuitBreakerRegistry) {
         this.apiKey         = apiKey;

@@ -58,7 +58,7 @@ ollama:
 groq:
   api-key: ${GROQ_API_KEY:}
   base-url: https://api.groq.com/openai/v1
-  model: llama3-8b-8192
+  model: llama-3.1-8b-instant
   timeout: 8000
 
 # ── Sarvam AI ─────────────────────────────────────────────────────────────

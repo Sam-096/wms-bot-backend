@@ -19,16 +19,16 @@ public class GreetingResponseCache {
 
     @PostConstruct
     public void load() {
-        cache.put("te", "నమస్కారం! మీ warehouse లో ఏమి జరుగుతుందో చెప్పండి 🏭");
-        cache.put("hi", "नमस्ते! आपके गोदाम में क्या हो रहा है? 🏭");
-        cache.put("en", "Hello! What's happening in your warehouse today? 🏭");
-        cache.put("ta", "வணக்கம்! உங்கள் கிடங்கில் என்ன நடக்கிறது? 🏭");
-        cache.put("kn", "ನಮಸ್ಕಾರ! ನಿಮ್ಮ ಗೋದಾಮಿನಲ್ಲಿ ಏನು ನಡೆಯುತ್ತಿದೆ? 🏭");
-        cache.put("mr", "नमस्कार! तुमच्या गोदामात काय चालू आहे? 🏭");
-        cache.put("bn", "নমস্কার! আপনার গুদামে কী ঘটছে? 🏭");
-        cache.put("gu", "નમસ્કાર! તમારા ગોડાઉનમાં શું થઈ રહ્યું છે? 🏭");
-        cache.put("pa", "ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ਤੁਹਾਡੇ ਗੁਦਾਮ ਵਿੱਚ ਕੀ ਹੋ ਰਿਹਾ ਹੈ? 🏭");
-        cache.put("or", "ନମସ୍କାର! ଆପଣଙ୍କ ଗୋଦାମ ରେ କ'ଣ ଚାଲୁ ଅଛି? 🏭");
+        cache.put("te", "నమస్కారం! మీ warehouse లో ఏమి జరుగుతుందో చెప్పగలను");
+        cache.put("hi", "नमस्ते! आपके गोदाम में क्या हो रहा है?");
+        cache.put("en", "Hello! What's happening in your warehouse today?");
+        cache.put("ta", "வணக்கம்! உங்கள் கிடங்கில் என்ன நடக்கிறது?");
+        cache.put("kn", "ನಮಸ್ಕಾರ! ನಿಮ್ಮ ಗೋದಾಮಿನಲ್ಲಿ ಏನು ನಡೆಯುತ್ತಿದೆ?");
+        cache.put("mr", "नमस्कार! तुमच्या गोदामात काय चालू आहे?");
+        cache.put("bn", "নমস্কার! আপনার গুদামে কী ঘটছে?");
+        cache.put("gu", "નમસ્કાર! તમારા ગોડાઉનમાં શું થઈ રહ્યું છે?");
+        cache.put("pa", "ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ਤੁਹਾਡੇ ਗੁਦਾਮ ਵਿੱਚ ਕੀ ਹੋ ਰਿਹਾ ਹੈ?");
+        cache.put("or", "ନମସ୍କାର! ଆପଣଙ୍କ ଗୋଦାମ ରେ କ'ଣ ଚାଲୁ ଅଛି?");
         log.info("GreetingResponseCache loaded {} language entries", cache.size());
     }
 
