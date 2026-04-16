@@ -10,7 +10,7 @@ public record ChatRequest(
     @Size(max = 500, message = "Message too long — max 500 characters")
     String message,
 
-    @Pattern(regexp = "^(te|hi|en|ta|kn|mr|bn|gu|pa|or)?$",
+    @Pattern(regexp = "^(te|hi|en|ta|kn|mr|bn|gu|pa|or|ne)?$",
              message = "Invalid language code")
     String language,
 

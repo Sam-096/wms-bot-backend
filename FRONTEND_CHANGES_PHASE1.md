@@ -107,7 +107,7 @@ are *required*, but for consistency:
 
 - When the user changes the language, the NEXT request updates the session and
   every subsequent reply stays in that language.
-- Supported codes: `en, te, hi, ta, kn, mr, bn, gu, pa, or`.
+- Supported codes: `en, te, hi, ta, kn, mr, bn, gu, pa, or, ne`.
 
 ---
 

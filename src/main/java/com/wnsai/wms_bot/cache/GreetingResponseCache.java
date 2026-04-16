@@ -29,6 +29,7 @@ public class GreetingResponseCache {
         cache.put("gu", "નમસ્કાર! તમારા ગોડાઉનમાં શું થઈ રહ્યું છે?");
         cache.put("pa", "ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ਤੁਹਾਡੇ ਗੁਦਾਮ ਵਿੱਚ ਕੀ ਹੋ ਰਿਹਾ ਹੈ?");
         cache.put("or", "ନମସ୍କାର! ଆପଣଙ୍କ ଗୋଦାମ ରେ କ'ଣ ଚାଲୁ ଅଛି?");
+        cache.put("ne", "नमस्ते! तपाईंको गोदाममा के भइरहेको छ?");
         log.info("GreetingResponseCache loaded {} language entries", cache.size());
     }
 
