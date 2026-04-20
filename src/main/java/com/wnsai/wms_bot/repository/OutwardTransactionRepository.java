@@ -27,10 +27,11 @@ public interface OutwardTransactionRepository extends JpaRepository<OutwardTrans
 
     List<OutwardTransaction> findTop10ByWarehouseIdOrderByCreatedAtDesc(String warehouseId);
 
-    @Query("SELECT o FROM OutwardTransaction o WHERE (:wid IS NULL OR o.warehouseId = :wid) " +
-           "AND (:status IS NULL OR UPPER(o.status) = UPPER(:status)) " +
-           "AND (:dateFrom IS NULL OR o.outwardDate >= :dateFrom) " +
-           "AND (:dateTo IS NULL OR o.outwardDate <= :dateTo)")
+    @Query("SELECT o FROM OutwardTransaction o " +
+           "WHERE o.warehouseId = COALESCE(:wid, o.warehouseId) " +
+           "AND UPPER(o.status) = UPPER(COALESCE(:status, o.status)) " +
+           "AND o.outwardDate >= COALESCE(:dateFrom, o.outwardDate) " +
+           "AND o.outwardDate <= COALESCE(:dateTo, o.outwardDate)")
     Page<OutwardTransaction> findFiltered(
             @Param("wid")      String warehouseId,
             @Param("status")   String status,
