@@ -28,7 +28,7 @@ public class OutwardController {
     @GetMapping
     @PreAuthorize("hasAnyRole('MANAGER','OPERATOR')")
     public Mono<Page<OutwardResponse>> list(
-            @RequestParam                                            String warehouseId,
+            @RequestParam(required = false)                          String warehouseId,
             @RequestParam(required = false)                          String status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,

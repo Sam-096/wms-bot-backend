@@ -29,8 +29,8 @@ public interface InwardTransactionRepository extends JpaRepository<InwardTransac
 
     List<InwardTransaction> findTop10ByWarehouseIdOrderByCreatedAtDesc(String warehouseId);
 
-    @Query("SELECT i FROM InwardTransaction i WHERE i.warehouseId = :wid " +
-           "AND (:status IS NULL OR i.status = :status) " +
+    @Query("SELECT i FROM InwardTransaction i WHERE (:wid IS NULL OR i.warehouseId = :wid) " +
+           "AND (:status IS NULL OR UPPER(i.status) = UPPER(:status)) " +
            "AND (:dateFrom IS NULL OR i.inwardDate >= :dateFrom) " +
            "AND (:dateTo IS NULL OR i.inwardDate <= :dateTo)")
     Page<InwardTransaction> findFiltered(
