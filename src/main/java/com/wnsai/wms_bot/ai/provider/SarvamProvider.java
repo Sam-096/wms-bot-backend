@@ -12,6 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.util.List;
@@ -100,6 +101,15 @@ public class SarvamProvider implements LLMProvider {
                         )
                 ))
                 .retrieve()
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                        response -> response.bodyToMono(String.class)
+                                .defaultIfEmpty("<no body>")
+                                .flatMap(body -> {
+                                    log.error("SarvamProvider HTTP {} — model={} errorBody={}",
+                                            response.statusCode().value(), model, body);
+                                    return Mono.error(new RuntimeException(
+                                            response.statusCode().value() + " from Sarvam: " + body));
+                                }))
                 .bodyToFlux(String.class)
                 .timeout(timeout)
                 .filter(line -> line.contains("\"content\"") && !line.contains("[DONE]"))
