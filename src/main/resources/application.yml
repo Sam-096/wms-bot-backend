@@ -82,6 +82,80 @@ intent:
   quick-response:
     enabled: true
 
+# ── Greeting guardrail (GreetingGuardrailConfig) ──────────────────────────
+# All values below are the production defaults; override on Render if needed.
+app:
+  intent:
+    greeting:
+      max-length: 40
+      blocked-domain-keywords:
+        - warehouse
+        - stock
+        - vehicle
+        - vehicles
+        - truck
+        - trucks
+        - bag
+        - bags
+        - gate pass
+        - gate entry
+        - summary
+        - report
+        - reports
+        - commodity
+        - commodities
+        - count
+        - inside
+        - loaded
+        - unloaded
+        - dispatch
+        - inward
+        - outward
+        - inventory
+        - grn
+        - lot
+        - how many
+        - how much
+        - what is
+        - what are
+        - show me
+        - tell me
+        - వేర్ హౌస్
+        - గోదాం
+        - స్టాక్
+        - బ్యాగ్స్
+        - బ్యాగులు
+        - వాహనాలు
+        - ట్రక్
+        - గేట్ పాస్
+        - సారాంశం
+        - రిపోర్ట్
+        - లోపల
+        - బయట
+        - ఎంత
+        - ఎన్ని
+        - చూపించు
+        - ఉంది
+        - వచ్చాయి
+      allowed-phrases:
+        - hi
+        - hello
+        - hey
+        - hii
+        - heya
+        - sup
+        - good morning
+        - good evening
+        - good night
+        - good afternoon
+        - namaste
+        - namaskar
+        - హలో
+        - నమస్కారం
+        - నమస్తే
+        - శుభోదయం
+        - నమస్కారం
+
 # ── Actuator ──────────────────────────────────────────────────────────────
 management:
   endpoints:

@@ -16,7 +16,8 @@ public class IntentKeywordConfig {
     // All 10 supported languages + common English
     private List<String> greeting = new ArrayList<>(List.of(
         // English
-        "hi", "hello", "hey", "hii", "heya", "sup", "good morning",
+        "hi", "hello", "hey", "hii", "heya", "sup",
+        "good morning", "good evening", "good afternoon", "good night",
         "namaste", "namaskar",
         // Telugu
         "హలో", "నమస్కారం", "నమస్తే", "శుభోదయం", "కేమ్ ఉన్నావ్",
