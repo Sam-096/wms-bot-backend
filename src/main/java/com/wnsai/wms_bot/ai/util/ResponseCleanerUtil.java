@@ -2,7 +2,9 @@ package com.wnsai.wms_bot.ai.util;
 
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
 /**
@@ -69,11 +71,29 @@ public class ResponseCleanerUtil {
      *   PASS_THROUGH → PASS_THROUGH  (steady state, all tokens emitted)
      */
     public Flux<String> cleanStream(Flux<String> rawTokens) {
+        AtomicReference<CleanState> lastState = new AtomicReference<>(CleanState.initial());
         return rawTokens
                 .scan(CleanState.initial(), CleanState::process)
                 .skip(1)                               // skip the initial empty state
+                .doOnNext(lastState::set)              // track last state for flush-on-complete
                 .filter(s -> !s.toEmit().isEmpty())
-                .map(CleanState::toEmit);
+                .map(CleanState::toEmit)
+                .concatWith(Mono.defer(() -> {
+                    CleanState state = lastState.get();
+                    // Only flush UNDETERMINED pending — stream ended before 50-char threshold.
+                    // IN_THINK content is intentionally suppressed; PASS_THROUGH empties pending inline.
+                    if (state.phase() != CleanState.Phase.UNDETERMINED) return Mono.empty();
+                    String pending = state.pending();
+                    if (pending == null || pending.isBlank()) return Mono.empty();
+                    String out = stripPatterns(pending).strip();
+                    return out.isBlank() ? Mono.empty() : Mono.just(out);
+                }));
+    }
+
+    private String stripPatterns(String text) {
+        String out = ACTION_BLOCK_PATTERN.matcher(text).replaceAll("");
+        out        = JSON_ENVELOPE_PATTERN.matcher(out).replaceAll("");
+        return     CODE_FENCE_PATTERN.matcher(out).replaceAll("");
     }
 
     // ─── Internal state machine ───────────────────────────────────────────────
