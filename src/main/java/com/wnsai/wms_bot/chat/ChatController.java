@@ -103,12 +103,13 @@ import java.util.concurrent.atomic.AtomicReference;
 // NOTE: @CrossOrigin removed — CORS is handled globally by CorsWebFilter bean in SecurityConfig
 public class ChatController {
 
-    private final ChatOrchestrator       orchestrator;
-    private final ObjectMapper           objectMapper;
-    private final IntentClassifier       intentClassifier;
-    private final WarehouseDataService   warehouseDataService;
-    private final ChatSessionRepository  chatSessionRepo;
-    private final ChatMessageRepository  chatMessageRepo;
+    private final ChatOrchestrator          orchestrator;
+    private final ObjectMapper              objectMapper;
+    private final IntentClassifier          intentClassifier;
+    private final WarehouseDataService      warehouseDataService;
+    private final ChatSessionRepository     chatSessionRepo;
+    private final ChatMessageRepository     chatMessageRepo;
+    private final WarehouseContextResolver  warehouseResolver;
 
     // ─── Primary SSE chat endpoint ────────────────────────────────────────────
 
@@ -124,52 +125,59 @@ public class ChatController {
         String jwtRole   = extractRole(authentication);
         String jwtUserId = extractUserId(authentication);
 
-        // Build a secure request overriding any client-supplied role/userId
-        ChatRequest secureReq = new ChatRequest(
-            req.message(), req.language(), jwtRole,
-            req.warehouseId(), req.sessionId(), req.warehouseName(),
-            req.context(), jwtUserId
-        );
+        // ── Resolve warehouseId: request → session → user-default ─────────────
+        // Runs on boundedElastic because session + user lookups are blocking JPA calls.
+        return Mono.fromCallable(() ->
+                warehouseResolver.resolve(req.warehouseId(), req.sessionId(), jwtUserId))
+            .subscribeOn(Schedulers.boundedElastic())
+            .flatMapMany(resolution -> {
 
-        log.info("POST /api/v1/chat sessionId={} lang={} jwtRole={} warehouseId={} userId={}",
-            secureReq.sessionId(), secureReq.language(), jwtRole,
-            secureReq.warehouseId(), jwtUserId);
+                String effectiveWarehouseId = resolution.orElse(req.warehouseId());
 
-        long startMs = System.currentTimeMillis();
-
-        // Classify once — orchestrator also calls classify internally, but we need
-        // the result here for persistence. Two separate calls would be triple classification.
-        var    intentResult    = intentClassifier.classify(secureReq.message());
-        String detectedIntent  = intentResult.type().name();
-        double confidence      = intentResult.confidence();
-
-        AtomicReference<StringBuilder> responseBuffer = new AtomicReference<>(new StringBuilder());
-        AtomicLong                     firstTokenMs   = new AtomicLong(0);
-
-        return orchestrator.handle(secureReq)
-            .doOnNext(response -> {
-                if (response.content() != null) {
-                    if ("TOKEN".equals(response.type()) || "INSTANT".equals(response.type())) {
-                        responseBuffer.get().append(response.content());
-                        firstTokenMs.compareAndSet(0, System.currentTimeMillis() - startMs);
-                    }
-                }
-            })
-            .map(response -> ServerSentEvent.<String>builder()
-                .event("message")
-                .data(toJson(response))
-                .build())
-            .doFinally(signal -> persistAsync(secureReq, detectedIntent, confidence,
-                responseBuffer.get().toString(),
-                System.currentTimeMillis() - startMs))
-            .onErrorResume(e -> {
-                log.error("Chat pipeline error: {}", e.getMessage());
-                return Flux.just(
-                    ServerSentEvent.<String>builder().event("message")
-                        .data(toJson(ChatResponse.error("INTERNAL_ERROR"))).build(),
-                    ServerSentEvent.<String>builder().event("message")
-                        .data(toJson(ChatResponse.done())).build()
+                ChatRequest secureReq = new ChatRequest(
+                    req.message(), req.language(), jwtRole,
+                    effectiveWarehouseId, req.sessionId(), req.warehouseName(),
+                    req.context(), jwtUserId
                 );
+
+                log.info("POST /api/v1/chat sessionId={} lang={} jwtRole={} warehouseId={} resolvedFrom={} userId={}",
+                    secureReq.sessionId(), secureReq.language(), jwtRole,
+                    effectiveWarehouseId, resolution.source(), jwtUserId);
+
+                long startMs = System.currentTimeMillis();
+
+                var    intentResult   = intentClassifier.classify(secureReq.message());
+                String detectedIntent = intentResult.type().name();
+                double confidence     = intentResult.confidence();
+
+                AtomicReference<StringBuilder> responseBuffer = new AtomicReference<>(new StringBuilder());
+                AtomicLong                     firstTokenMs   = new AtomicLong(0);
+
+                return orchestrator.handle(secureReq)
+                    .doOnNext(response -> {
+                        if (response.content() != null) {
+                            if ("TOKEN".equals(response.type()) || "INSTANT".equals(response.type())) {
+                                responseBuffer.get().append(response.content());
+                                firstTokenMs.compareAndSet(0, System.currentTimeMillis() - startMs);
+                            }
+                        }
+                    })
+                    .map(response -> ServerSentEvent.<String>builder()
+                        .event("message")
+                        .data(toJson(response))
+                        .build())
+                    .doFinally(signal -> persistAsync(secureReq, detectedIntent, confidence,
+                        responseBuffer.get().toString(),
+                        System.currentTimeMillis() - startMs))
+                    .onErrorResume(e -> {
+                        log.error("Chat pipeline error: {}", e.getMessage());
+                        return Flux.just(
+                            ServerSentEvent.<String>builder().event("message")
+                                .data(toJson(ChatResponse.error("INTERNAL_ERROR"))).build(),
+                            ServerSentEvent.<String>builder().event("message")
+                                .data(toJson(ChatResponse.done())).build()
+                        );
+                    });
             });
     }
 
@@ -231,23 +239,40 @@ public class ChatController {
                 ChatSession s = existing.get();
                 if (payload.containsKey("title"))    s.setTitle(payload.get("title"));
                 if (payload.containsKey("language")) s.setLanguage(payload.get("language"));
+                // Upgrade UNKNOWN warehouseId if a better source is now available
+                if (!warehouseResolver.isValid(s.getWarehouseId())) {
+                    var resolution = warehouseResolver.resolve(
+                            payload.get("warehouseId"), null, jwtUserId);
+                    if (resolution.isResolved()) {
+                        log.info("Upgrading UNKNOWN warehouseId for sessionId={} to={} from={}",
+                                sessionId, resolution.warehouseId(), resolution.source());
+                        s.setWarehouseId(resolution.warehouseId());
+                    }
+                }
                 return chatSessionRepo.save(s);
             }
+
             UUID userUuid = null;
             try { if (jwtUserId != null) userUuid = UUID.fromString(jwtUserId); }
             catch (IllegalArgumentException ignored) {}
 
+            // Resolve warehouseId: request body → user default → "UNKNOWN" last resort
+            var resolution = warehouseResolver.resolve(
+                    payload.get("warehouseId"), null, jwtUserId);
+            String resolvedWarehouseId = resolution.orElse("UNKNOWN");
+
+            log.info("Creating new ChatSession sessionId={} warehouseId={} resolvedFrom={}",
+                    sessionId, resolvedWarehouseId, resolution.source());
+
             ChatSession s = ChatSession.builder()
                 .sessionId(sessionId)
-                .warehouseId(payload.getOrDefault("warehouseId", "UNKNOWN"))
+                .warehouseId(resolvedWarehouseId)
                 .language(payload.getOrDefault("language", "en"))
                 .title(payload.getOrDefault("title", "New Chat"))
                 .userId(userUuid)
                 .messageCount(0)
                 .isDeleted(false)
                 .build();
-            log.info("Creating new ChatSession sessionId={} warehouseId={}",
-                sessionId, s.getWarehouseId());
             return chatSessionRepo.save(s);
         }).subscribeOn(Schedulers.boundedElastic());
     }
