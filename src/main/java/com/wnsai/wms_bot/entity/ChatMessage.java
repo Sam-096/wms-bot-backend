@@ -20,10 +20,10 @@ public class ChatMessage {
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
-    @Column(name = "session_id")
+    @Column(name = "session_id",   columnDefinition = "TEXT")
     private String sessionId;
 
-    @Column(name = "warehouse_id")
+    @Column(name = "warehouse_id", columnDefinition = "TEXT")
     private String warehouseId;
 
     @Column(name = "user_message", columnDefinition = "TEXT")
@@ -32,10 +32,10 @@ public class ChatMessage {
     @Column(name = "bot_response", columnDefinition = "TEXT")
     private String botResponse;
 
-    @Column(name = "intent")
+    @Column(name = "intent",   length = 50)
     private String intent;
 
-    @Column(name = "language")
+    @Column(name = "language", length = 10)
     private String language;
 
     @Column(name = "confidence")

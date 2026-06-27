@@ -99,12 +99,16 @@ public class WarehouseDataService {
      */
     public ChatMessage saveChatMessage(ChatMessage msg) {
         try {
+            log.debug("saveChatMessage: sessionId={} warehouseId={} intent={} aiProvider={} responseType={}",
+                    msg.getSessionId(), msg.getWarehouseId(),
+                    msg.getIntent(), msg.getAiProvider(), msg.getResponseType());
             ChatMessage saved = chatMessageRepo.save(msg);
-            log.info("ChatMessage saved id={} sessionId={} intent={}",
-                saved.getId(), saved.getSessionId(), saved.getIntent());
+            log.info("ChatMessage saved id={} sessionId={} warehouseId={} intent={}",
+                    saved.getId(), saved.getSessionId(), saved.getWarehouseId(), saved.getIntent());
             return saved;
         } catch (Exception e) {
-            log.error("saveChatMessage failed for sessionId={}: {}", msg.getSessionId(), e.getMessage());
+            log.error("saveChatMessage FAILED sessionId={} warehouseId={} intent={} cause={}",
+                    msg.getSessionId(), msg.getWarehouseId(), msg.getIntent(), e.getMessage());
             return null;
         }
     }

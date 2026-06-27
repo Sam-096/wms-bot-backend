@@ -21,10 +21,10 @@ public class ChatSession {
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
-    @Column(name = "session_id", nullable = false, unique = true)
+    @Column(name = "session_id",   nullable = false, unique = true, columnDefinition = "TEXT")
     private String sessionId;
 
-    @Column(name = "warehouse_id", nullable = false)
+    @Column(name = "warehouse_id", nullable = false, columnDefinition = "TEXT")
     private String warehouseId;
 
     @Column(name = "language")
