@@ -21,7 +21,7 @@ import java.util.Map;
 
 /**
  * Tier 2 — Groq Cloud API (OpenAI-compatible).
- * Uses llama3-8b-8192 with 8s timeout + Resilience4j circuit breaker.
+ * Uses llama-3.1-8b-instant with 8s timeout + Resilience4j circuit breaker.
  *
  * Circuit breaker "groq" opens after 60% failure rate in 5 calls,
  * waits 30s in OPEN state, then allows 2 test calls in HALF-OPEN.
