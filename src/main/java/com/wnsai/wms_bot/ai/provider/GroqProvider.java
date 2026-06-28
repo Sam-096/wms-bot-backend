@@ -16,6 +16,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -112,9 +113,18 @@ public class GroqProvider implements LLMProvider {
                                 }))
                 .bodyToFlux(String.class)
                 .timeout(timeout)
-                .filter(line -> line.startsWith("data:") && !line.contains("[DONE]"))
+                // bodyToFlux(String) delivers one String per HTTP/Netty DataBuffer.
+                // A single DataBuffer can contain multiple SSE "data:" lines when
+                // Groq batches events. Split explicitly so every line is processed.
+                .doOnNext(raw -> log.debug("GroqProvider raw chunk ({} chars): {}",
+                        raw.length(), raw.length() > 120 ? raw.substring(0, 120) + "…" : raw))
+                .flatMapIterable(chunk -> Arrays.asList(chunk.split("\r?\n")))
+                .filter(line -> !line.isBlank()
+                             && line.startsWith("data:")
+                             && !line.contains("[DONE]"))
                 .map(line -> line.substring(5).trim())
                 .map(this::extractToken)
+                .doOnNext(token -> { if (!token.isBlank()) log.debug("GroqProvider token: '{}'", token); })
                 .filter(t -> !t.isBlank());
     }
 

@@ -15,6 +15,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -112,7 +113,11 @@ public class SarvamProvider implements LLMProvider {
                                 }))
                 .bodyToFlux(String.class)
                 .timeout(timeout)
-                .filter(line -> line.contains("\"content\"") && !line.contains("[DONE]"))
+                // Same batching issue as Groq: split each DataBuffer into SSE lines first.
+                .flatMapIterable(chunk -> Arrays.asList(chunk.split("\r?\n")))
+                .filter(line -> !line.isBlank()
+                             && line.contains("\"content\"")
+                             && !line.contains("[DONE]"))
                 .map(this::extractToken)
                 .filter(t -> !t.isBlank());
     }
