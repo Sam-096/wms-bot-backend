@@ -118,7 +118,6 @@ class GreetingGuardrailTest {
             "dispatch summary for today",
             "inward outward report",
             "వేర్ హౌస్ లోపల ఎన్ని బ్యాగ్స్ వచ్చాయి",
-            "స్టాక్ ఎంత ఉంది",
             "వాహనాలు ఎన్ని లోపల ఉన్నాయి"
         })
         void pureBusinessQuery_classifiedAsAiQuery(String message) {

@@ -151,16 +151,41 @@ public class IntentClassifierService implements IntentClassifier {
     // ─── Quick-query resolution ───────────────────────────────────────────────
 
     private String resolveQuickEntity(String normalized) {
-        if (contains(normalized, "low stock") || (contains(normalized, "stock") && contains(normalized, "ఎంత")))
+        // Stock / inventory — English and Telugu (స్టాక్ = Telugu for "stock")
+        if (contains(normalized, "low stock")
+                || contains(normalized, "stock count")
+                || (contains(normalized, "stock")     && contains(normalized, "ఎంత"))
+                || (contains(normalized, "స్టాక్")    && contains(normalized, "ఎంత"))
+                || contains(normalized, "స్టాక్ ఎంత")
+                || (contains(normalized, "తక్కువ")    && contains(normalized, "స్టాక్")))
             return "LOW_STOCK";
-        if (contains(normalized, "pending inward") || (contains(normalized, "pending") && contains(normalized, "inward")))
+
+        // Pending inward — English and Telugu
+        if (contains(normalized, "pending inward")
+                || (contains(normalized, "pending")    && contains(normalized, "inward"))
+                || (contains(normalized, "పెండింగ్")  && contains(normalized, "ఇన్వార్డ్"))
+                || contains(normalized, "ఇన్వార్డ్ పెండింగ్"))
             return "PENDING_INWARD";
-        if (contains(normalized, "today outward") || (contains(normalized, "today") && contains(normalized, "outward")))
+
+        // Today outward — English and Telugu
+        if (contains(normalized, "today outward")
+                || (contains(normalized, "today")       && contains(normalized, "outward"))
+                || (contains(normalized, "ఈ రోజు")     && contains(normalized, "అవుట్వార్డ్")))
             return "TODAY_OUTWARD";
-        if (contains(normalized, "active gate pass") || (contains(normalized, "active") && contains(normalized, "gate")))
+
+        // Active gate passes — English and Telugu
+        if (contains(normalized, "active gate pass")
+                || (contains(normalized, "active")      && contains(normalized, "gate"))
+                || contains(normalized, "లోపల వాహనాలు")
+                || (contains(normalized, "గేట్ పాస్")  && contains(normalized, "ఓపెన్")))
             return "ACTIVE_GATE_PASSES";
-        if (contains(normalized, "expiring bond") || (contains(normalized, "expir") && contains(normalized, "bond")))
+
+        // Expiring bonds — English and Telugu
+        if (contains(normalized, "expiring bond")
+                || (contains(normalized, "expir")       && contains(normalized, "bond"))
+                || (contains(normalized, "బాండ్")       && contains(normalized, "ఎక్స్పైర్")))
             return "EXPIRING_BONDS";
+
         return null;
     }
 

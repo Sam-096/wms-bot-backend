@@ -48,10 +48,19 @@ public class IntentKeywordConfig {
 
     // Quick-query trigger phrases (answered from DB directly)
     private List<String> quickQuery = new ArrayList<>(List.of(
+        // English
         "stock ఎంత", "pending inward", "today outward",
         "active gate passes", "expiring bonds", "low stock",
         "stock count", "how many items", "total stock",
-        "ఎంత ఉంది", "ఎన్ని bags", "తక్కువ stock"
+        // Telugu — stock
+        "స్టాక్ ఎంత", "స్టాక్ ఎంత ఉంది", "తక్కువ స్టాక్",
+        "ఎంత ఉంది", "ఎన్ని bags", "తక్కువ stock",
+        // Telugu — inward / outward / gate
+        "పెండింగ్ ఇన్వార్డ్", "ఇన్వార్డ్ పెండింగ్",
+        "ఈ రోజు అవుట్వార్డ్",
+        "లోపల వాహనాలు", "గేట్ పాస్ ఓపెన్",
+        // Telugu — bonds
+        "బాండ్ ఎక్స్పైర్"
     ));
 
     // ─── Getters and Setters ────────────────────────────────────────────────────

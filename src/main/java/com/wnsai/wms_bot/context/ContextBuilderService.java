@@ -40,22 +40,29 @@ public class ContextBuilderService implements ContextBuilder {
         String lower = message.toLowerCase();
         List<String> sections = new ArrayList<>();
 
-        // Only fetch sections relevant to the query keywords
+        // Only fetch sections relevant to the query keywords.
+        // Telugu transliterations are included alongside English so context is built
+        // even when the user types in Telugu script (e.g. స్టాక్ = stock).
         if (anyOf(lower, "stock", "inventory", "bags", "quantity", "available",
-                         "item", "commodit", "ఎంత", "stock", "మాల")) {
+                         "item", "commodit", "ఎంత", "మాల",
+                         "స్టాక్", "ఇన్వెంటరీ", "బ్యాగ్", "బ్యాగులు", "ఎన్ని")) {
             sections.add(fetchInventorySummary(warehouseId));
         }
         if (anyOf(lower, "inward", "receipt", "arrival", "pending", "received",
-                         "truck", "incoming", "grn", "entry")) {
+                         "truck", "incoming", "grn", "entry",
+                         "ఇన్వార్డ్", "పెండింగ్", "వచ్చిన", "రిసీట్")) {
             sections.add(fetchRecentInward(warehouseId));
         }
-        if (anyOf(lower, "outward", "dispatch", "delivery", "sent", "outgoing")) {
+        if (anyOf(lower, "outward", "dispatch", "delivery", "sent", "outgoing",
+                         "అవుట్వార్డ్", "డిస్పాచ్", "పంపించిన")) {
             sections.add(fetchRecentOutward(warehouseId));
         }
-        if (anyOf(lower, "bond", "pledge", "lien", "collateral", "customs", "bonded")) {
+        if (anyOf(lower, "bond", "pledge", "lien", "collateral", "customs", "bonded",
+                         "బాండ్", "ప్లెడ్జ్")) {
             sections.add(fetchBondSummary(warehouseId));
         }
-        if (anyOf(lower, "gate", "vehicle", "driver", "pass", "inside", "entry", "exit")) {
+        if (anyOf(lower, "gate", "vehicle", "driver", "pass", "inside", "entry", "exit",
+                         "గేట్", "వాహన", "డ్రైవర్", "లోపల", "బయట", "ఎంట్రీ")) {
             sections.add(fetchGateStatus(warehouseId));
         }
 
